@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="짐을 돌려 맞춰 이삿짐 상자를 빈틈없이 채우는 3D 퍼즐">
+<style>[hidden]{display:none!important}</style>
+<title>카피바라 이삿짐</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: full-screen room with the moving box in the middle; HUD on top, a bottom dock with the tray of belongings
+   and the turn / place buttons; side buttons for view, undo, hint. One deliberate light look: a sunny moving day. */
+:root {
+  --sky-top: #f3e6d4;
+  --sky-bot: #fbf4ea;
+  --ink: #3a3631;
+  --ink-soft: #7a7066;
+  --panel: #fffdf8;
+  --panel-line: #e8dccb;
+  --kraft: #c99a62;
+  --kraft-deep: #a5773f;
+  --go: #6cba86;
+  --go-deep: #4e9a68;
+  --blush: #ff9fb2;
+  --locked: #d8d0c4;
+  --warn: #e3584b;
+  --f-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+html { box-sizing: border-box; height: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+body { height: 100%; margin: 0; overflow: hidden; background: linear-gradient(180deg, var(--sky-top), var(--sky-bot)); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--kraft); outline-offset: 2px; }
+#app { position: relative; height: 100%; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.round { width: 44px; height: 44px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--panel); box-shadow: 0 3px 0 var(--panel-line), 0 8px 18px rgba(58, 54, 49, .12); }
+.round svg { width: 21px; height: 21px; stroke: var(--ink); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.round:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--panel-line); }
+.round:disabled { opacity: .45; cursor: default; }
+.coach { animation: beat 1s ease-in-out infinite; box-shadow: 0 0 0 3px var(--kraft), 0 8px 18px rgba(58, 54, 49, .2) !important; }
+@keyframes beat { 50% { transform: scale(1.07); } }
+
+.hud { position: absolute; left: 0; right: 0; top: 0; display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px; padding: max(12px, env(safe-area-inset-top, 0px)) 16px 0; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud-right { display: flex; gap: 8px; }
+.stage-name { justify-self: center; text-align: center; min-width: 0; }
+.stage-name b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 22px; line-height: 1.2; text-wrap: balance; }
+.stage-name > span { display: inline-block; margin-top: 4px; padding: 2px 12px; border-radius: 999px; background: rgba(255, 253, 248, .8); font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.goals { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; margin-top: 6px; }
+.goal { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px 2px 8px; border-radius: 999px; background: rgba(255, 253, 248, .9); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.goal.done { background: var(--go); color: #fff; }
+
+.side { position: absolute; display: grid; gap: 8px; bottom: calc(var(--dock-h, 170px) + 12px); }
+.side.left { left: 16px; }
+.side.right { right: 16px; }
+.side .label { display: block; font-size: 11px; color: var(--ink-soft); text-align: center; margin-top: 2px; }
+
+.dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px max(12px, env(safe-area-inset-bottom, 0px)); background: rgba(255, 253, 248, .92); border-top: 1px solid var(--panel-line); box-shadow: 0 -10px 30px rgba(58, 54, 49, .08); }
+.tray { display: flex; gap: 8px; overflow-x: auto; padding: 4px 4px 8px; scroll-snap-type: x proximity; }
+.item { flex: none; width: 72px; height: 72px; border-radius: 16px; border: 2px solid var(--panel-line); background: #fff; display: grid; place-items: center; padding: 4px; scroll-snap-align: center; position: relative; }
+.item svg { width: 100%; height: 100%; overflow: visible; }
+.item[aria-pressed="true"] { border-color: var(--kraft); background: #fff6ea; box-shadow: 0 0 0 3px rgba(201, 154, 98, .3); }
+.item .tag { position: absolute; top: -6px; right: -6px; font-size: 10px; padding: 0 6px; border-radius: 999px; background: var(--ink); color: #fff; font-family: var(--f-display); }
+.actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.pill { height: 44px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--panel-line); background: #fff; display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-display); font-size: 15px; }
+.pill svg { width: 18px; height: 18px; stroke: var(--ink); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pill:disabled { opacity: .45; cursor: default; }
+.pill.place { background: var(--go); border-color: var(--go); color: #fff; padding: 0 22px; box-shadow: 0 4px 0 var(--go-deep); }
+.pill.place svg { stroke: #fff; }
+.pill.place:disabled { background: var(--locked); border-color: var(--locked); box-shadow: none; }
+.dock-note { text-align: center; font-size: 13px; color: var(--ink-soft); margin: 0 0 6px; min-height: 1.5em; }
+.dock-note.warn { color: #5b4fd6; }
+
+.tip { position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top, 0px)) + 104px); width: min(420px, calc(100% - 32px)); display: grid; grid-template-columns: 40px 1fr; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 18px; background: var(--panel); border: 0; box-shadow: 0 8px 22px rgba(58, 54, 49, .14); text-align: left; font-size: 14px; }
+.tip svg { width: 40px; height: 30px; }
+.toast { position: absolute; left: 50%; bottom: calc(var(--dock-h, 170px) + 16px); transform: translateX(-50%); max-width: calc(100% - 140px); padding: 8px 16px; border-radius: 999px; background: var(--ink); color: var(--panel); font-size: 14px; text-align: center; box-shadow: 0 8px 20px rgba(58, 54, 49, .25); animation: pop .25s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.overlay { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: end center; overflow: auto; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); }
+.overlay.center { place-items: center; background: rgba(243, 230, 212, .6); }
+.card { width: min(460px, 100%); min-width: 0; background: var(--panel); border-radius: 26px; padding: 22px 22px 20px; box-shadow: 0 6px 0 var(--panel-line), 0 20px 50px rgba(58, 54, 49, .18); }
+.title-card { text-align: center; }
+.title-card h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(32px, 9vw, 44px); line-height: 1.1; text-wrap: balance; }
+.title-card h1 em { font-style: normal; color: var(--kraft-deep); }
+.title-card p { margin: 8px auto 18px; color: var(--ink-soft); max-width: 30em; text-wrap: balance; }
+.btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.primary { border: 0; border-radius: 18px; padding: 12px 22px; min-width: 140px; background: var(--kraft); color: #fff; font-family: var(--f-display); font-size: 19px; box-shadow: 0 4px 0 var(--kraft-deep); }
+.primary:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--kraft-deep); }
+.secondary { border: 2px solid var(--panel-line); border-radius: 18px; padding: 10px 20px; min-width: 120px; background: var(--panel); font-family: var(--f-display); font-size: 18px; }
+.progress-note { margin-top: 14px; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.select-card { width: min(560px, 100%); }
+.select-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.select-head h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.chapters { position: relative; display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 10px; margin: 0 -4px 6px; }
+.chapters button { flex: none; display: grid; grid-template-columns: auto auto; column-gap: 6px; align-items: baseline; text-align: left; border: 2px solid var(--panel-line); border-radius: 14px; background: #fff; padding: 6px 12px 5px; }
+.chapters button b { font-family: var(--f-display); font-weight: 400; font-size: 18px; color: var(--kraft-deep); grid-row: span 2; }
+.chapters button span { font-size: 13px; white-space: nowrap; }
+.chapters button small { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.chapters button[aria-selected="true"] { border-color: var(--kraft); background: #fff6ea; }
+.chapters button:disabled { cursor: not-allowed; opacity: .5; }
+.village-gim { margin: -2px 0 10px; font-size: 13px; color: var(--ink-soft); }
+.stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.stage { border: 2px solid var(--panel-line); border-radius: 18px; background: #fff; padding: 10px 6px 9px; text-align: center; display: grid; gap: 2px; justify-items: center; }
+.stage .num { font-family: var(--f-display); font-size: 26px; line-height: 1; color: var(--kraft-deep); }
+.stage .nm { font-size: 12px; line-height: 1.3; min-height: 1.3em; }
+.stage.cleared { border-color: var(--go); }
+.stage.next { border-color: var(--kraft); box-shadow: 0 0 0 3px rgba(201, 154, 98, .3); }
+.stage:disabled { cursor: not-allowed; background: #f6f2ec; }
+.stage:disabled .num, .stage:disabled .nm { color: var(--locked); }
+.flowers { display: flex; gap: 2px; height: 16px; align-items: center; }
+.flowers svg { width: 15px; height: 15px; }
+.f-on { fill: var(--blush); } .f-off { fill: var(--locked); }
+.intro-card { text-align: center; width: min(380px, 100%); }
+.intro-tag { display: inline-block; padding: 2px 12px; border-radius: 999px; background: var(--kraft); color: #fff; font-family: var(--f-display); font-size: 14px; }
+.gim-art { display: block; width: 112px; height: 112px; margin: 12px auto 6px; }
+.intro-card h2 { margin: 0 0 6px; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.intro-card p { margin: 0 auto 18px; color: var(--ink-soft); max-width: 26em; text-wrap: pretty; }
+.dex-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); max-height: min(62vh, 560px); overflow: auto; padding: 2px; }
+.dex-item { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; background: #fff; border: 2px solid var(--panel-line); border-radius: 16px; padding: 8px 10px; }
+.dex-item svg { width: 52px; height: 52px; }
+.dex-item b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 16px; }
+.dex-item small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; color: var(--ink-soft); line-height: 1.4; }
+.dex-item.locked { cursor: default; background: #f6f2ec; }
+#clear { background: linear-gradient(180deg, transparent 40%, rgba(251, 244, 234, .7)); }
+.clear-card { text-align: center; animation: rise .45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.clear-card h2 { margin: 0 0 4px; font-family: var(--f-display); font-weight: 400; font-size: 28px; text-wrap: balance; }
+.big-flowers { display: flex; justify-content: center; gap: 8px; margin: 10px 0 6px; }
+.big-flowers svg { width: 44px; height: 44px; }
+.big-flowers svg.f-on-anim { animation: bloom .5s ease-out both; }
+@keyframes bloom { from { transform: scale(.2) rotate(-40deg); } to { transform: none; } }
+.stats { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 16px; }
+.stats span { padding: 4px 12px; border-radius: 999px; background: #f3ede3; font-size: 14px; font-variant-numeric: tabular-nums; }
+.clear-next { margin: -6px 0 14px; font-size: 14px; color: var(--kraft-deep); text-wrap: balance; }
+@media (max-width: 480px) {
+  .hud { padding-inline: 12px; gap: 6px; }
+  .hud-right { flex-direction: column; gap: 6px; }
+  .round { width: 40px; height: 40px; }
+  .stage-name b { font-size: 18px; }
+  .goal { font-size: 12px; }
+  .side.left { left: 10px; } .side.right { right: 10px; }
+  .item { width: 64px; height: 64px; }
+  .pill { padding: 0 11px; font-size: 14px; }
+  .pill.place { padding: 0 16px; }
+  .card { padding: 18px 16px 16px; border-radius: 22px; }
+  .stages { gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="flower" viewBox="0 0 20 20">
+    <circle cx="10" cy="4.6" r="3.9"/><circle cx="15.1" cy="8.3" r="3.9"/><circle cx="13.2" cy="14.3" r="3.9"/>
+    <circle cx="6.8" cy="14.3" r="3.9"/><circle cx="4.9" cy="8.3" r="3.9"/><circle cx="10" cy="10" r="3" fill="#fff6d8"/>
+  </symbol>
+  <symbol id="capy" viewBox="0 0 40 30">
+    <rect x="11" y="11" width="27" height="16" rx="8" fill="#b07a4f"/><rect x="2" y="8" width="20" height="17" rx="7" fill="#b07a4f"/>
+    <rect x="1" y="15" width="11" height="10" rx="4.5" fill="#7a5233"/><circle cx="12" cy="6" r="5" fill="#ffa236"/>
+    <path d="M13 14 q2.4 -2 4.8 0" stroke="#3a3631" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<div id="app">
+  <canvas id="scene" aria-label="이삿짐 상자. 짐을 골라 상자 위를 눌러 자리를 정하고 넣기를 눌러요."></canvas>
+
+  <header class="hud" id="hud" hidden>
+    <button type="button" class="round" id="toSelect" aria-label="스테이지 목록"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg></button>
+    <div class="stage-name"><b id="stageTitle"></b><span id="moveLabel"></span><div class="goals" id="goals" aria-live="polite"></div></div>
+    <div class="hud-right">
+      <button type="button" class="round" id="helpBtn" aria-label="짐싸기 도감"><svg viewBox="0 0 24 24"><path d="M9.2 9a3 3 0 1 1 4.3 2.7c-.9.5-1.5 1.2-1.5 2.3v.5"/><path d="M12 18h.01"/></svg></button>
+      <button type="button" class="round" id="soundBtn" aria-label="소리 끄기"><svg viewBox="0 0 24 24" id="soundIcon"></svg></button>
+    </div>
+  </header>
+
+  <button type="button" class="tip" id="tip" hidden><svg viewBox="0 0 40 30" aria-hidden="true"><use href="#capy"/></svg><span id="tipText"></span></button>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <div class="side left" id="sideL" hidden>
+    <div><button type="button" class="round" id="viewL" aria-label="상자를 왼쪽으로 돌려 보기"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></button><span class="label">보기</span></div>
+    <div><button type="button" class="round" id="viewR" aria-label="상자를 오른쪽으로 돌려 보기"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></svg></button><span class="label">보기</span></div>
+  </div>
+  <div class="side right" id="sideR" hidden>
+    <div><button type="button" class="round" id="undoBtn" aria-label="한 번 되돌리기"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button><span class="label">되돌리기</span></div>
+    <div><button type="button" class="round" id="hintBtn" aria-label="힌트"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"/></svg></button><span class="label">힌트</span></div>
+    <div><button type="button" class="round" id="resetBtn" aria-label="처음부터"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button><span class="label">처음부터</span></div>
+  </div>
+
+  <section class="dock" id="dock" hidden>
+    <p class="dock-note" id="dockNote"></p>
+    <div class="tray" id="tray" aria-label="짐 고르기"></div>
+    <div class="actions">
+      <button type="button" class="pill" data-turn="yaw"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></svg>돌리기</button>
+      <button type="button" class="pill" data-turn="pitch"><svg viewBox="0 0 24 24"><path d="M12 4v16M7 9l5-5 5 5"/></svg>세우기</button>
+      <button type="button" class="pill" data-turn="roll"><svg viewBox="0 0 24 24"><path d="M4 12h16M9 7l-5 5 5 5"/></svg>눕히기</button>
+      <button type="button" class="pill place" id="placeBtn"><svg viewBox="0 0 24 24"><path d="M12 4v13M6 11l6 6 6-6"/></svg>넣기</button>
+    </div>
+  </section>
+
+  <section class="overlay" id="title">
+    <div class="card title-card">
+      <h1>카피바라 <em>이삿짐</em></h1>
+      <p>이사 가는 날이에요. 짐을 하나씩 골라 상자에 빈틈없이 채우면 카피바라가 테이프를 붙여요.</p>
+      <div class="btn-row">
+        <button type="button" class="primary" id="playBtn">시작하기</button>
+        <button type="button" class="secondary" id="stagesBtn">스테이지</button>
+      </div>
+      <div class="progress-note" id="progressNote"></div>
+    </div>
+  </section>
+
+  <section class="overlay center" id="select" hidden>
+    <div class="card select-card" role="dialog" aria-labelledby="selectTitle">
+      <div class="select-head">
+        <h2 id="selectTitle">방 고르기</h2>
+        <button type="button" class="round" id="closeSelect" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="chapters" id="chapters" role="tablist" aria-label="방"></div>
+      <p class="village-gim" id="villageGim"></p>
+      <div class="stages" id="stages"></div>
+      <div class="progress-note" id="selectNote"></div>
+    </div>
+  </section>
+
+  <section class="overlay center" id="intro" hidden>
+    <div class="card intro-card" role="dialog" aria-labelledby="introTitle">
+      <span class="intro-tag" id="introTag"></span>
+      <svg class="gim-art" id="introArt" viewBox="0 0 64 64" aria-hidden="true"></svg>
+      <h2 id="introTitle"></h2>
+      <p id="introText"></p>
+      <button type="button" class="primary" id="introGo">해볼게요</button>
+    </div>
+  </section>
+
+  <section class="overlay center" id="dex" hidden>
+    <div class="card select-card" role="dialog" aria-labelledby="dexTitle">
+      <div class="select-head">
+        <h2 id="dexTitle">짐싸기 도감</h2>
+        <button type="button" class="round" id="closeDex" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="dex-list" id="dexList"></div>
+    </div>
+  </section>
+
+  <section class="overlay" id="clear" hidden>
+    <div class="card clear-card" role="dialog" aria-labelledby="clearTitle">
+      <h2 id="clearTitle"></h2>
+      <div class="big-flowers" id="bigFlowers"></div>
+      <div class="stats" id="clearStats"></div>
+      <p class="clear-next" id="clearNext" hidden></p>
+      <div class="btn-row">
+        <button type="button" class="secondary" id="againBtn">다시 하기</button>
+        <button type="button" class="primary" id="nextBtn">다음 상자</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+// LOGIC START
+// Cubes are [x, y, z] with y up. A piece is a list of cubes; orientations are normalised (min corner at 0).
+const keyC = ([x, y, z]) => `${x},${y},${z}`;
+function normalize(cs) {
+  const mx = Math.min(...cs.map(c => c[0])), my = Math.min(...cs.map(c => c[1])), mz = Math.min(...cs.map(c => c[2]));
+  return cs.map(([x, y, z]) => [x - mx, y - my, z - mz]).sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0]);
+}
+const shapeKey = cs => normalize(cs).map(keyC).join(';');
+const yaw = cs => normalize(cs.map(([x, y, z]) => [-z, y, x]));     // turn around the vertical axis
+const pitch = cs => normalize(cs.map(([x, y, z]) => [x, -z, y]));   // tip forward
+const roll = cs => normalize(cs.map(([x, y, z]) => [-y, x, z]));    // tip sideways
+const TURNS = { yaw, pitch, roll };
+// shortest button sequence that turns `from` into `to` (or null if they are different shapes)
+function turnsBetween(from, to) {
+  const goal = shapeKey(to), start = normalize(from);
+  const prev = new Map([[shapeKey(start), null]]), q = [start];
+  for (let i = 0; i < q.length; i++) {
+    const k = shapeKey(q[i]);
+    if (k === goal) { const seq = []; for (let kk = k; prev.get(kk); kk = prev.get(kk)[0]) seq.unshift(prev.get(kk)[1]); return seq; }
+    for (const [name, f] of Object.entries(TURNS)) { const n = f(q[i]), nk = shapeKey(n); if (!prev.has(nk)) { prev.set(nk, [k, name]); q.push(n); } }
+  }
+  return null;
+}
+
+// box state: filled[key] = piece id (or 'cat'); fragile/heavy flags live on pieces
+function makeBox(L) {
+  const [W, H, D] = L.size;
+  const filled = new Map();
+  for (const [x, z] of L.cats || []) for (let y = 0; y < H; y++) filled.set(keyC([x, y, z]), 'cat');
+  return { W, H, D, filled, cells: W * H * D };
+}
+const heightAt = (box, x, z) => { let h = 0; for (let y = 0; y < box.H; y++) if (box.filled.has(keyC([x, y, z]))) h = y + 1; return h; };
+
+// where would this piece land if dropped with its footprint corner at (ax, az)? null if it can't go there
+function landing(box, cubes, ax, az, piece, pieces) {
+  let Y = 0;
+  for (const [cx, cy, cz] of cubes) {
+    const x = ax + cx, z = az + cz;
+    if (x < 0 || z < 0 || x >= box.W || z >= box.D) return { ok: false, why: 'out' };
+    Y = Math.max(Y, heightAt(box, x, z) - cy);
+  }
+  const cells = cubes.map(([cx, cy, cz]) => [ax + cx, Y + cy, az + cz]);
+  if (cells.some(c => c[1] >= box.H)) return { ok: false, why: 'tall', cells };
+  if (piece.heavy && Y !== 0) return { ok: false, why: 'heavy', cells };
+  // nothing may rest above a fragile piece
+  for (const [x, y, z] of cells) for (let yy = 0; yy < y; yy++) {
+    const id = box.filled.get(keyC([x, yy, z]));
+    if (id !== undefined && id !== 'cat' && pieces[id].fragile) return { ok: false, why: 'fragile', cells };
+  }
+  // empty cells trapped underneath
+  const own = new Set(cells.map(keyC));
+  let holes = 0;
+  for (const [x, y, z] of cells) for (let yy = 0; yy < y; yy++) { const k = keyC([x, yy, z]); if (!box.filled.has(k) && !own.has(k)) holes++; }
+  return { ok: true, Y, cells, holes };
+}
+function solvedBox(box) { return box.filled.size === box.cells; }
+// LOGIC END
+
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- stages ----------
+const ROOMS = [
+  { name: '부엌 짐',     gim: 'pack',    sky: ['#f3e6d4', '#fbf4ea'], rug: 0xe9c9a3 },
+  { name: '그릇 찬장',   gim: 'fragile', sky: ['#e3eef2', '#f8f4ec'], rug: 0xc9dde6 },
+  { name: '책장 정리',   gim: 'heavy',   sky: ['#efe2d0', '#f7efe4'], rug: 0xd8c3a5 },
+  { name: '고양이 낮잠', gim: 'cats',    sky: ['#f6e1e4', '#fbf2ea'], rug: 0xf2c9cf },
+  { name: '큰 상자',     gim: 'mix', mix: '상자가 커졌어요. 아래층부터 차근차근 채워요.',            sky: ['#eee6d8', '#faf5ec'], rug: 0xe2cfae },
+  { name: '그릇과 책',   gim: 'mix', mix: '그릇은 맨 위, 책은 바닥에 넣어요.',                      sky: ['#e6ecef', '#f8f4ec'], rug: 0xcfd9dc },
+  { name: '책과 고양이', gim: 'mix', mix: '책은 바닥에, 고양이 칸은 비워 둬요.',                    sky: ['#f1e2d6', '#fbf2ea'], rug: 0xe5c7b3 },
+  { name: '그릇과 고양이', gim: 'mix', mix: '그릇은 맨 위에, 고양이 칸은 비워 둬요.',               sky: ['#ece3ee', '#faf3ef'], rug: 0xdcc8de },
+  { name: '거실 큰 짐',  gim: 'mix', mix: '큰 상자에 그릇과 책이 함께 나와요.',                     sky: ['#efe6d6', '#fbf5ea'], rug: 0xd9c6a2 },
+  { name: '마지막 짐',   gim: 'mix', mix: '그릇, 책, 고양이가 모두 나와요. 마지막 이삿짐이에요.', sky: ['#f7e3cf', '#fdf3e6'], rug: 0xf0c8a8 },
+];
+const PER_ROOM = 10;
+const LEVEL_DATA = [{"size":[2,2,2],"cats":[],"pieces":[{"cells":[[0,0,1],[1,0,1],[0,0,0]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[1,1,1],[0,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false}],"order":[1,0,2]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[2,0,0],[2,0,1],[2,1,0],[1,0,1]],"start":[[1,0,1],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,0,1],[1,0,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[1,1,1],[0,1,1],[1,1,0]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false}],"order":[1,0,2]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,0],[0,0,1],[1,0,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[1,0,0],[2,0,1]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[0,1,1],[0,1,0]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[2,1,0],[2,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false}],"order":[0,2,1,3]},{"size":[3,2,3],"cats":[],"pieces":[{"cells":[[0,0,1],[0,0,0],[0,0,2]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,2],[2,0,2],[2,1,2]],"start":[[0,0,0],[1,0,0],[1,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,0,0],[2,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[1,1,2],[0,1,2],[0,1,1],[0,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2],[1,0,2]],"fragile":false,"heavy":false}],"order":[0,2,3,1,4]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[0,0,1],[1,0,1],[0,0,0],[0,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,0,0],[1,0,0],[2,1,0]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,1,1],[1,2,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,2,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,2,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,2,0],[1,2,0],[0,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":false}],"order":[1,0,2,5,3,4]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[0,0,0],[0,0,1],[0,1,0],[1,0,1]],"start":[[0,0,0],[0,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[1,1,1],[1,2,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,2,1],[0,2,0]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[2,2,1],[2,2,0]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false}],"order":[1,0,3,2,4,5]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,2],[0,0,2],[2,0,2],[1,0,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[0,0,0],[2,0,0],[2,0,1]],"start":[[0,0,1],[0,1,1],[0,2,0],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1],[0,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[1,1,2],[2,1,2],[2,1,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[1,2,1],[2,1,0]],"start":[[0,0,1],[0,1,0],[1,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[0,2,1],[0,2,2]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,0],[2,2,2],[1,2,2]],"start":[[2,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false}],"order":[0,1,3,2,5,4,6]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[2,0,1],[1,0,1],[1,0,2],[2,0,0]],"start":[[0,0,0],[0,1,0],[0,1,1],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[0,0,0],[1,1,1]],"start":[[1,0,0],[1,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,0,1],[0,1,1],[0,2,1],[1,2,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[2,1,1],[2,1,0],[1,1,2],[1,2,2]],"start":[[1,0,2],[1,1,0],[1,1,1],[0,1,2],[1,1,2],[0,2,2]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0],[1,2,0],[2,2,0]],"start":[[0,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[0,1,2,4,3,5,6]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[2,0,0],[1,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,2],[2,0,2],[0,0,2]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,0,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[1,1,1]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,1,2],[3,1,1],[2,1,2],[2,2,2],[3,2,2]],"start":[[1,0,1],[1,1,0],[0,1,1],[1,1,1],[0,2,1],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[2,1,0],[1,1,0],[1,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[1,1,2],[1,2,2]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,2,0],[2,2,1],[3,2,1],[3,2,0],[1,2,1]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[0,2,1],[0,2,2]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false}],"order":[1,8,2,5,0,4,10,3,6,7,9]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[0,0,2],[0,0,1],[0,0,0]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[2,0,2],[2,0,1],[2,0,0],[2,1,1]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,2,1],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[1,1,1],[0,1,2]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0],[0,2,0],[0,2,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,2],[3,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,1,2],[2,2,2],[2,2,1],[2,2,0]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0],[2,1,0],[3,2,1],[3,2,2]],"start":[[1,0,0],[1,0,1],[1,0,2],[0,1,2],[1,1,2]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[1,2,2],[1,2,0],[0,2,2]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,1,0]],"fragile":false,"heavy":false}],"order":[2,0,4,6,3,1,5,7,10,9,8]},{"size":[2,2,2],"cats":[],"pieces":[{"cells":[[1,0,0],[1,0,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[1,0,2]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,1],[0,0,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[1,0,0]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,1,1],[0,1,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":true,"heavy":false},{"cells":[[2,1,1],[2,1,0],[1,1,0],[0,1,0]],"start":[[0,0,0],[0,1,0],[0,2,0],[1,2,0]],"fragile":false,"heavy":false}],"order":[0,1,2,3]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,1],[0,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[1,0,0],[1,0,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[1,1,0],[1,1,1]],"start":[[1,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":true,"heavy":false}],"order":[0,1,3,2]},{"size":[3,2,3],"cats":[],"pieces":[{"cells":[[2,0,0],[2,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,0,1],[0,1,2]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[2,0,2],[1,0,1],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[0,0,0],[2,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,2],[1,1,2]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[0,1,0],[0,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,1,2,4,3,5]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[2,0,0],[2,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[1,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[0,0,0],[0,1,0],[0,2,0]],"start":[[2,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,2,1],[1,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[2,1,0],[2,1,1]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[2,2,0],[2,2,1],[1,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":true,"heavy":false}],"order":[0,1,3,2,4,5]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[2,0,0],[2,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,0,1],[0,0,1],[0,0,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[1,1,1],[2,1,0]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[1,1,0],[0,1,1]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[1,2,1],[0,2,1]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":true,"heavy":false},{"cells":[[2,2,0],[1,2,0],[0,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":true,"heavy":false}],"order":[1,3,0,2,4,5]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,2],[2,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1],[0,1,0],[1,0,0],[1,0,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[2,1,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2],[2,1,2],[2,2,2],[2,2,1]],"start":[[2,0,0],[2,1,0],[0,1,1],[1,1,1],[2,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[0,1,1],[1,1,1],[1,1,0],[1,2,0],[1,2,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[0,2,1],[0,2,2],[1,2,2]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,0,1]],"fragile":true,"heavy":false}],"order":[1,5,0,2,3,6,4]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,2],[1,0,1],[0,0,2],[1,1,1],[2,0,2]],"start":[[0,0,1],[1,0,1],[2,0,1],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[2,0,0],[2,0,1],[1,1,0]],"start":[[0,0,0],[1,0,0],[1,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,2],[1,1,2],[0,1,0],[2,1,2]],"start":[[2,0,0],[2,1,0],[0,2,0],[1,2,0],[2,2,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,1,1],[2,2,1],[2,2,0]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":true,"heavy":false},{"cells":[[1,2,0],[0,2,0],[1,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":true,"heavy":false},{"cells":[[1,2,2],[2,2,2],[0,2,2],[0,2,1]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,0]],"fragile":false,"heavy":false}],"order":[0,1,3,6,2,4,5]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[0,0,0],[1,0,0],[0,0,1],[2,0,0]],"start":[[0,0,0],[0,0,1],[0,0,2],[1,0,2]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[1,0,2],[1,0,1],[2,0,1]],"start":[[1,0,0],[2,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[3,0,2],[3,0,1],[3,0,0]],"start":[[0,0,0],[0,1,0],[0,2,0],[1,2,0],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,2],[1,1,2],[1,1,1],[2,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2],[1,0,2]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,1,1],[2,1,0],[3,2,0],[3,1,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[2,2,0],[2,2,1],[3,2,1]],"start":[[1,0,0],[1,1,0],[0,1,1],[1,1,1],[0,1,2]],"fragile":true,"heavy":false},{"cells":[[1,2,1],[1,2,2],[0,2,1],[0,2,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":true,"heavy":false},{"cells":[[3,2,2],[2,2,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,2,1,5,3,7,4,6,8]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[2,0,1],[2,0,0],[1,0,0],[3,0,0]],"start":[[1,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,0,1],[2,0,2],[1,0,2],[1,0,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,2],[0,1,2]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[1,1,0],[0,1,1]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[2,1,2],[2,1,1],[1,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,1,2],[3,1,1],[3,2,2],[3,1,0],[2,1,0]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,0,2],[1,1,2]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[0,2,1],[0,2,0],[1,2,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":true,"heavy":false},{"cells":[[1,2,0],[2,2,0],[3,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[2,2,2],[2,2,1],[3,2,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[1,0,2]],"fragile":true,"heavy":false}],"order":[2,1,0,4,5,3,8,6,7]},{"size":[2,2,2],"cats":[],"pieces":[{"cells":[[0,0,0],[0,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,0],[1,1,0],[1,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[0,1,1],[0,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[1,0,2]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,1],[0,0,0],[1,0,0],[1,0,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[1,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[2,0,0],[2,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0],[1,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,3,1,2]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[1,0,0],[2,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[1,0,1],[0,0,1],[1,1,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[2,1,0],[1,1,0],[2,1,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false}],"order":[1,0,3,2]},{"size":[3,2,3],"cats":[],"pieces":[{"cells":[[2,0,2],[2,0,1],[1,0,1],[1,0,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,2],[0,1,1],[0,0,0]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,2,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[2,0,0],[2,1,0]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[0,1,2],[1,1,2],[1,1,1]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[0,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false}],"order":[2,0,4,1,5,3]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[2,0,0],[1,0,0],[0,0,0],[1,0,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,0,2]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1],[0,1,0]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,1,1],[2,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[0,2,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,0],[1,2,1],[0,2,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,1,2,4,3]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[1,0,1],[1,0,0],[0,0,1]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,0,0],[2,1,1],[2,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,2,1],[1,2,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[2,2,0],[2,2,1],[0,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,0,1]],"fragile":false,"heavy":false}],"order":[2,0,3,4,1,5]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,2],[1,1,2],[0,0,2]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,0,0],[1,0,0]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[1,0,1],[0,0,1],[1,1,1],[0,0,0],[2,1,1]],"start":[[0,0,1],[1,0,1],[2,1,0],[1,1,1],[2,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[2,2,2]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[0,1,0],[0,1,1],[0,1,2]],"start":[[2,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0],[2,2,1],[1,2,1],[0,2,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[2,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[1,2,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[1,2,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[1,2,3,0,4,6,7,5]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,2],[2,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[2,0,0],[1,0,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[0,0,2],[0,0,1],[0,1,2]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[1,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[1,1,0]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[0,1,1],[0,2,1],[0,2,2],[1,2,1]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0],[1,2,0],[0,2,0]],"start":[[0,0,2],[0,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[2,1,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[2,2,2],[2,2,1]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false}],"order":[1,0,4,7,3,2,6,5,8]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[1,0,0],[0,0,0],[0,0,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[2,0,2],[1,0,1]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[3,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,1,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,2],[0,1,2],[1,1,2],[1,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[2,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":true},{"cells":[[2,1,0],[2,1,1],[1,1,0],[3,1,1],[2,1,2]],"start":[[0,0,0],[0,0,1],[0,1,1],[0,1,2],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,1,1],[0,2,1],[0,2,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[1,2,2],[0,2,2]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[2,2,0],[2,2,1],[3,2,1],[3,2,2],[2,2,2]],"start":[[0,0,0],[1,0,0],[1,0,1],[2,0,1],[1,0,2],[2,0,2]],"fragile":false,"heavy":false}],"order":[1,3,5,4,0,2,9,8,7,6,10]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[3,0,2],[2,0,2],[3,0,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0],[0,0,1],[0,0,2],[0,2,0]],"start":[[2,0,0],[2,1,0],[0,2,0],[1,2,0],[2,2,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0],[1,0,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,2],[2,0,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,1,0],[3,1,1],[3,2,0]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,2,1]],"fragile":false,"heavy":true},{"cells":[[2,1,2],[2,1,1],[3,1,2],[1,1,1]],"start":[[0,0,1],[0,0,2],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,2],[1,1,2],[0,2,1],[0,2,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[2,2,0]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[3,2,1],[3,2,2],[2,2,1],[2,2,2],[1,2,1],[1,2,2]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false}],"order":[1,0,3,2,5,4,6,8,7]},{"size":[3,2,2],"cats":[[1,0]],"pieces":[{"cells":[[2,0,1],[2,0,0],[2,1,0]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1],[1,0,1]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[1,1,1],[0,1,1],[0,1,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,1,2]},{"size":[3,2,2],"cats":[[2,1]],"pieces":[{"cells":[[1,0,1],[1,0,0],[2,0,0],[0,0,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,1,1],[0,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[1,0,1],[1,0,2]],"fragile":false,"heavy":false}],"order":[0,1,2]},{"size":[3,2,2],"cats":[[2,1]],"pieces":[{"cells":[[0,0,0],[1,0,0],[2,0,0],[1,1,0],[2,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[1,2,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[1,0,1],[1,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,1,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[0,1,2]},{"size":[3,2,3],"cats":[[2,2]],"pieces":[{"cells":[[1,0,2],[1,0,1],[2,0,1],[2,0,0]],"start":[[0,0,0],[1,0,0],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,0,1],[0,0,0]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[2,1,0],[2,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,1,1],[1,1,2],[1,1,1],[0,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false}],"order":[0,2,1,3]},{"size":[3,3,2],"cats":[[1,1]],"pieces":[{"cells":[[0,0,0],[1,0,0],[0,1,0],[0,0,1],[0,2,0]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,2,1],[2,2,0]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,2,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false}],"order":[0,3,1,4,2]},{"size":[3,3,2],"cats":[[1,0]],"pieces":[{"cells":[[1,0,1],[2,0,1],[2,0,0]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1],[0,1,1],[1,1,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,0],[2,2,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[1,2,1],[0,2,1]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":false}],"order":[0,3,1,2,4]},{"size":[3,3,3],"cats":[[0,0],[0,2]],"pieces":[{"cells":[[1,0,2],[2,0,2],[1,0,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[1,0,0],[2,0,1],[2,1,1],[2,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1],[0,2,1],[1,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[1,2,2],[2,1,2],[2,2,2],[1,2,1]],"start":[[0,0,1],[1,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[2,2,0],[2,2,1]],"start":[[0,0,0],[0,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false}],"order":[0,1,2,3,4]},{"size":[3,3,3],"cats":[[2,1],[2,2]],"pieces":[{"cells":[[0,0,0],[1,0,0],[1,0,1],[1,0,2],[0,0,1]],"start":[[1,0,0],[2,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2],[0,2,2]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0],[1,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,1,1],[0,2,0],[1,1,1],[0,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,2,0],[1,2,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[1,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[0,2,3,1,5,4]},{"size":[4,3,3],"cats":[[0,0],[2,2]],"pieces":[{"cells":[[0,0,2],[0,0,1],[1,0,2],[1,0,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[2,0,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[2,0,0],[1,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,1,2],[3,2,2]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[0,1,1],[2,1,1]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[0,1,2],[1,2,2],[0,2,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,1],[3,2,1],[2,2,1],[3,2,0]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0],[1,2,0]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[0,2,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[1,3,2,0,6,5,4,8,9,7]},{"size":[4,3,3],"cats":[[0,0],[0,1]],"pieces":[{"cells":[[3,0,2],[2,0,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[1,0,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[0,0,2],[1,1,2],[0,1,2]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,0,1],[3,1,1],[3,1,2],[2,1,2],[3,2,2]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,1,1],[2,1,1],[2,2,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[2,1,0],[2,1,1],[1,1,1],[1,2,1]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,1,0],[2,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[1,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,2,0],[2,2,1],[3,2,1],[2,2,2],[1,2,0]],"start":[[0,0,0],[0,1,0],[1,1,0],[2,1,0],[1,2,0]],"fragile":false,"heavy":false}],"order":[2,6,0,1,3,4,5,7]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,0],[1,0,0],[2,0,0],[1,0,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[2,1,0]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[1,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false}],"order":[2,0,1,3]},{"size":[3,2,3],"cats":[],"pieces":[{"cells":[[1,0,1],[0,0,1],[0,1,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[1,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[2,0,2],[2,1,2]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2],[1,1,1],[2,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[1,1,0],[1,2,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[2,1,0]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[0,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[4,1,0,2,3,5]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[2,0,1],[2,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0],[1,0,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[1,1,1],[2,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0],[1,2,0]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0],[0,2,1],[0,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[1,2,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[0,1,2,3,4,5]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[0,0,1],[0,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[1,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[2,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[1,1,0],[1,1,1],[2,1,1],[2,2,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,1,1],[0,2,0]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[2,2,1],[1,2,0],[0,2,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false}],"order":[2,1,3,0,4,5]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,2],[1,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,0,2],[2,0,0],[1,0,0]],"start":[[0,0,1],[0,1,1],[0,2,0],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,0,1],[0,0,0],[0,1,2],[1,1,2]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,1,1],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[2,1,2],[2,2,2],[2,1,1],[1,1,1],[0,1,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,0,1],[2,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[1,1,0],[2,1,0],[0,2,0],[1,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[1,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,0],[1,2,1],[0,2,1]],"start":[[1,0,0],[1,0,1],[0,0,2],[1,0,2]],"fragile":false,"heavy":false}],"order":[0,2,5,1,3,4,6]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,0],[0,0,0],[1,0,1],[1,1,0],[0,0,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,0,2],[2,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0],[2,2,0],[1,2,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[0,0,2],[0,1,2],[1,1,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[1,2,1],[2,2,1],[1,2,2],[2,2,2],[2,1,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[0,2,1],[0,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false}],"order":[3,0,4,2,6,1,5]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[1,0,0],[2,0,0],[0,0,0],[1,1,0],[3,0,0]],"start":[[2,0,0],[0,1,0],[1,1,0],[2,1,0],[3,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[1,0,1],[2,0,1],[0,0,2]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,0,1],[2,0,2],[1,0,2]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,2],[0,1,0],[1,1,2],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,2],[3,1,1],[2,1,2]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0],[3,2,1],[3,2,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[1,2,0],[2,2,0],[0,2,1],[1,2,1]],"start":[[1,0,0],[2,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[1,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[2,0,1,4,6,5,8,3,7,9]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[0,0,2],[1,0,2],[1,0,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[2,1,0],[3,0,0]],"start":[[0,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0],[1,0,0]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,1,1],[3,2,1],[3,0,2]],"start":[[0,0,0],[0,1,0],[0,2,0],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[2,1,1],[3,1,2]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[1,1,2],[0,1,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0],[2,2,0],[1,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[1,1,0],[1,1,1],[0,2,0],[0,2,1]],"start":[[0,0,0],[0,0,1],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[2,2,1],[1,2,2],[0,2,2]],"start":[[0,0,0],[0,0,1],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[3,2,2],[2,2,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,3,1,4,9,2,5,7,8,6]},{"size":[4,2,4],"cats":[],"pieces":[{"cells":[[2,0,3],[2,0,2],[1,0,3],[3,0,3],[1,0,2]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[0,0,3],[0,1,3],[0,0,2],[0,0,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[2,0,1],[1,0,0],[2,0,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,1,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,0,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,1,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[1,1,1],[2,1,1],[3,1,1],[0,1,2]],"start":[[0,0,0],[1,0,0],[1,1,0],[2,1,0],[3,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[3,1,0],[1,1,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[2,1,2],[2,1,3],[3,1,3],[1,1,3]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":false,"heavy":false}],"order":[2,1,3,4,7,5,0,8,6]},{"size":[4,3,4],"cats":[],"pieces":[{"cells":[[2,0,2],[2,0,1],[1,0,2],[2,0,0],[1,0,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,0,3],[1,0,3],[0,0,3],[1,1,3]],"start":[[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,3],[3,1,3],[2,1,3],[3,1,2],[3,2,3]],"start":[[1,0,1],[1,1,0],[0,1,1],[1,1,1],[2,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0],[1,0,0]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2],[0,1,1],[2,1,2]],"start":[[0,0,1],[0,1,0],[0,1,1],[1,1,1],[2,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0],[0,2,1],[1,1,0]],"start":[[0,0,0],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,3],[0,2,3],[0,2,2],[1,2,2],[1,2,3]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,1,1],[2,2,0],[1,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,1],[3,2,1],[3,2,0]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[1,2,1],[2,2,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,2,2],[2,2,2],[2,2,3]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false}],"order":[5,1,0,2,3,4,10,6,9,7,11,8,12]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,1],[1,0,1],[1,1,1],[1,1,0]],"start":[[1,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,0,0],[2,1,0],[1,0,0],[2,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[1,0,2]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,1],[0,1,1],[0,0,0],[0,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,0,1],[1,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":true,"heavy":false},{"cells":[[2,0,1],[2,0,0],[2,1,1],[2,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true}],"order":[0,1,2]},{"size":[3,2,3],"cats":[],"pieces":[{"cells":[[1,0,2],[0,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,0,0],[2,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[0,0,0],[1,0,1]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,1],[0,1,1],[0,1,2],[1,1,2],[0,1,0]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2],[0,1,2]],"fragile":true,"heavy":false},{"cells":[[1,1,1],[1,1,0],[2,1,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false}],"order":[3,0,4,1,5,2]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[2,0,1],[2,0,0],[1,0,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[0,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,1,1],[1,1,1]],"start":[[0,0,1],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[2,1,1],[2,1,0],[2,2,0],[2,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":true,"heavy":false},{"cells":[[1,1,0],[1,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[0,2,1],[1,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[1,2,5,0,3,4]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[1,0,1],[0,0,1],[1,1,1],[2,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[1,0,0],[0,1,0]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[2,1,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[0,1,1],[0,2,1],[0,2,0],[1,2,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[2,2,0],[2,2,1]],"start":[[1,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":true,"heavy":false}],"order":[1,2,0,3,4]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[0,0,2],[1,0,2],[1,0,1],[0,0,1],[2,0,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[0,2,0],[1,2,0]],"fragile":false,"heavy":true},{"cells":[[1,0,0],[1,1,0],[2,0,0]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[2,0,2],[2,1,2],[1,1,2],[2,2,2]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,1,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,2,2],[1,2,2],[1,2,1],[1,2,0]],"start":[[0,0,1],[1,0,1],[2,0,1],[0,1,0],[0,1,1]],"fragile":true,"heavy":false},{"cells":[[2,1,0],[2,1,1],[2,2,0],[2,2,1],[1,1,1]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[0,2,1]],"start":[[0,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[0,2,1,3,5,4,6]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[1,0,0],[0,0,0],[1,0,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[1,0,2],[2,0,1],[2,0,0]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,1],[0,0,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":true},{"cells":[[0,1,2],[1,1,2],[0,2,2],[1,2,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":true,"heavy":false},{"cells":[[0,1,1],[1,1,1],[0,1,0]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,0],[1,1,0],[2,1,2],[2,2,0]],"start":[[0,0,0],[0,0,1],[0,0,2],[1,0,2],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,2,1],[0,2,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[1,2,1],[2,2,1],[2,2,2]],"start":[[0,0,0],[0,0,1],[1,0,1],[1,0,2]],"fragile":true,"heavy":false}],"order":[1,0,2,3,5,4,7,6]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[2,0,0],[1,0,0],[1,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,1,1],[2,0,1],[1,0,2],[0,0,2]],"start":[[1,0,0],[2,0,0],[0,0,1],[1,0,1],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[2,0,2],[3,0,2],[3,1,2]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,0,0],[3,1,1],[2,1,1],[3,1,0]],"start":[[1,0,0],[1,0,1],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0],[0,1,1],[0,1,0],[0,2,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2],[1,0,2]],"fragile":false,"heavy":true},{"cells":[[2,1,2],[1,1,2],[0,1,2],[2,2,2],[3,2,2]],"start":[[0,0,0],[1,0,0],[1,1,0],[2,1,0],[3,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[1,2,0]],"start":[[0,0,0],[1,0,0]],"fragile":true,"heavy":false},{"cells":[[1,2,2],[0,2,2],[1,2,1],[2,2,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":true,"heavy":false},{"cells":[[3,2,0],[3,2,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[1,3,2,0,9,6,4,7,5,8]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[0,0,0],[1,0,0],[1,0,1],[2,0,1],[2,0,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,0,1],[2,0,1]],"fragile":false,"heavy":true},{"cells":[[2,0,2],[3,0,2],[3,0,1],[3,1,2],[3,0,0]],"start":[[0,0,0],[0,0,1],[1,0,1],[2,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,2],[1,0,2],[1,1,2]],"start":[[0,0,0],[0,0,1],[1,0,1],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[0,1,1],[0,1,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[1,1,0],[2,1,0]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,2,1],[2,1,2],[1,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[3,1,1],[3,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[3,2,1],[3,2,2]],"start":[[0,0,0],[0,0,1]],"fragile":true,"heavy":false},{"cells":[[1,2,1],[1,2,2],[0,2,1],[0,2,0],[2,2,2],[0,2,2]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,0],[0,1,1],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[3,2,0],[2,2,0],[1,2,0]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":true,"heavy":false}],"order":[2,0,3,1,5,4,8,6,9,7]},{"size":[4,2,4],"cats":[],"pieces":[{"cells":[[2,0,0],[1,0,0],[1,0,1],[0,0,0]],"start":[[0,0,0],[0,1,0],[0,1,1],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[0,0,2],[0,1,2]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,0,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":true},{"cells":[[1,0,3],[0,0,3],[0,1,3],[2,0,3]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1],[0,1,0]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":true,"heavy":false},{"cells":[[3,0,2],[3,1,2],[2,0,2],[3,0,3],[2,0,1]],"start":[[1,0,1],[0,1,0],[1,1,0],[1,1,1],[2,1,1]],"fragile":false,"heavy":true},{"cells":[[2,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[1,1,1],[1,1,0]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[3,1,1],[3,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[3,1,3],[2,1,3],[1,1,3],[2,1,2]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":true,"heavy":false}],"order":[3,5,2,1,9,0,4,6,8,7]},{"size":[3,2,2],"cats":[[0,1]],"pieces":[{"cells":[[2,0,0],[2,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,0],[0,0,0],[0,1,0]],"start":[[0,0,0],[1,0,0],[1,0,1],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[1,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,1,2,3]},{"size":[3,2,2],"cats":[[2,0]],"pieces":[{"cells":[[1,0,0],[1,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[1,2,0,3]},{"size":[3,2,3],"cats":[[0,0]],"pieces":[{"cells":[[1,0,0],[2,0,0],[2,0,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[0,0,1],[1,0,2],[0,0,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[1,1,2],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[0,1,1],[0,1,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[1,1,0],[2,1,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false}],"order":[0,4,1,3,2]},{"size":[3,3,2],"cats":[[2,0]],"pieces":[{"cells":[[2,0,1],[1,0,1],[1,0,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0],[0,0,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,2,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[0,2,0],[1,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,2,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false}],"order":[1,0,3,2,4]},{"size":[3,3,2],"cats":[[2,1]],"pieces":[{"cells":[[1,0,0],[0,0,0],[1,0,1],[2,0,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1],[1,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[0,1,0],[1,1,0],[2,1,0],[2,2,0]],"start":[[0,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[0,2,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,2,1],[0,2,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,2,1,3,4]},{"size":[3,3,3],"cats":[[2,2]],"pieces":[{"cells":[[0,0,1],[0,0,0],[1,0,0],[1,1,0],[1,0,1]],"start":[[1,0,0],[1,0,1],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[1,0,2],[0,0,2],[1,1,2]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,0,0],[2,1,0],[2,1,1],[2,2,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[0,1,1],[0,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,2,2],[1,2,2],[0,2,1]],"start":[[0,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[1,2,0],[1,2,1],[2,2,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,0,2]],"fragile":false,"heavy":false}],"order":[2,1,0,3,5,4]},{"size":[3,3,3],"cats":[[2,0],[1,0]],"pieces":[{"cells":[[1,0,1],[1,0,2],[1,1,2],[2,0,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,2],[0,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[2,1,2],[1,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0],[0,1,1]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,2,2],[1,2,2]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[1,2,1],[0,2,1],[2,2,2],[0,2,0]],"start":[[0,0,0],[0,0,1],[0,1,1],[0,2,1],[0,2,2]],"fragile":false,"heavy":false}],"order":[0,2,1,4,3,5]},{"size":[4,3,3],"cats":[[2,1],[0,0]],"pieces":[{"cells":[[2,0,2],[3,0,2],[1,0,2]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":true},{"cells":[[1,0,0],[2,0,0],[2,1,0],[3,0,0]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":true},{"cells":[[0,0,1],[0,0,2],[1,0,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,1,1],[3,1,0],[3,1,2]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[1,1,2],[1,2,1],[2,1,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,2,0],[2,2,0],[3,2,0],[3,2,1]],"start":[[0,0,2],[0,1,0],[1,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[0,2,1],[1,2,2]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,2,2],[2,2,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,1,3,2,4,5,7,6,8]},{"size":[4,3,3],"cats":[[2,1],[2,2]],"pieces":[{"cells":[[0,0,1],[0,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[0,0,0],[2,0,0]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[1,1,2],[1,0,1],[0,1,2]],"start":[[0,0,0],[1,0,0],[1,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":true},{"cells":[[3,0,0],[3,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[2,1,0],[1,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0],[0,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,1],[3,1,2],[3,2,1],[3,2,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[2,2,0],[3,2,0],[1,2,1],[0,2,1]],"start":[[1,0,0],[2,0,0],[3,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[0,2,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,4,1,3,7,2,5,6,8,9]},{"size":[4,2,4],"cats":[[2,2],[0,3]],"pieces":[{"cells":[[1,0,3],[2,0,3],[1,0,2],[0,0,2],[3,0,3]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,1,0],[3,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,1,2],[3,0,1]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[1,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[1,0,1],[2,0,1],[1,1,1]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[3,0,0],[2,1,0],[1,1,0],[2,1,1]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,1,1],[0,1,2]],"fragile":false,"heavy":true},{"cells":[[2,1,3],[1,1,3],[3,1,3],[1,1,2],[0,1,2]],"start":[[2,0,0],[3,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,1],[3,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[2,1,0,5,3,4,6,7]},{"size":[3,2,2],"cats":[[2,0]],"pieces":[{"cells":[[1,0,0],[0,0,0],[0,0,1],[1,1,0]],"start":[[1,0,0],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[1,0,1],[1,1,1],[2,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,1,1]],"start":[[0,0,0],[1,0,0]],"fragile":true,"heavy":false}],"order":[0,1,2]},{"size":[3,2,2],"cats":[[2,1]],"pieces":[{"cells":[[1,0,1],[1,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0],[0,1,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[1,1,1],[0,1,1]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":true,"heavy":false}],"order":[2,1,0,3]},{"size":[3,2,3],"cats":[[0,1]],"pieces":[{"cells":[[2,0,2],[1,0,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,0,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[1,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[2,1,2],[1,1,1]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,1,1]],"fragile":true,"heavy":false}],"order":[4,1,0,3,2,5]},{"size":[3,3,2],"cats":[[0,0]],"pieces":[{"cells":[[1,0,1],[2,0,1],[0,0,1],[1,0,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0],[2,2,0],[1,1,0]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,2,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[0,1,1],[2,1,1]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[1,2,1],[2,2,1],[0,2,1]],"start":[[0,0,0],[0,1,0],[0,1,1],[0,2,0]],"fragile":true,"heavy":false}],"order":[0,1,2,3]},{"size":[3,3,2],"cats":[[2,1]],"pieces":[{"cells":[[1,0,1],[1,0,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,0],[0,1,1],[0,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0],[1,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[1,2,1],[0,2,1],[0,2,0]],"start":[[0,0,0],[0,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,2,0],[1,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false}],"order":[1,0,2,4,3]},{"size":[3,3,3],"cats":[[1,1]],"pieces":[{"cells":[[2,0,0],[2,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[0,0,0],[0,0,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[0,0,2],[2,0,2],[2,1,2]],"start":[[0,0,0],[1,0,0],[1,1,0],[1,2,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,1,1],[1,1,0],[0,1,0],[0,1,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,2,0],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[1,1,2],[1,2,2],[0,2,2],[2,2,2],[2,2,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,0,1],[2,0,1],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[0,2,1],[0,2,0],[1,2,0],[2,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[1,2,0,3,5,4]},{"size":[3,3,3],"cats":[[2,0],[1,0]],"pieces":[{"cells":[[2,0,1],[2,0,2],[1,0,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,1,1],[0,0,2],[0,2,1]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[0,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":true,"heavy":false},{"cells":[[1,0,2],[1,1,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,2],[1,1,1]],"start":[[0,0,0],[1,0,0],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,2,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[1,2,1],[2,2,1],[2,2,2]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":true,"heavy":false}],"order":[2,0,4,3,6,1,5]},{"size":[4,3,3],"cats":[[3,2],[2,2]],"pieces":[{"cells":[[2,0,1],[3,0,1],[1,0,1]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[1,0,2],[0,0,1],[0,0,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[3,0,0],[1,0,0],[2,1,0],[2,2,0]],"start":[[0,0,0],[0,1,0],[1,1,0],[2,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[1,1,1],[1,1,0],[0,1,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[1,1,2],[1,2,2]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,2,1]],"start":[[0,0,0],[1,0,0]],"fragile":true,"heavy":false},{"cells":[[3,1,1],[3,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[0,2,1],[1,2,0],[1,2,1],[0,2,2]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[3,2,0],[3,2,1]],"start":[[0,0,0],[1,0,0]],"fragile":true,"heavy":false}],"order":[2,1,0,3,6,5,8,4,7]},{"size":[4,3,3],"cats":[[1,0],[3,2]],"pieces":[{"cells":[[2,0,0],[2,0,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1],[1,0,1],[0,0,2]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[1,0,2],[2,2,2],[2,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[2,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,0,1],[3,1,1],[3,1,0]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,1,2],[1,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0],[0,1,2],[0,2,2]],"start":[[2,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[1,2,1],[2,2,1],[3,2,1],[3,2,0],[2,2,0]],"start":[[1,0,0],[2,0,0],[0,0,1],[1,0,1],[2,0,1],[0,0,2]],"fragile":true,"heavy":false},{"cells":[[0,2,1],[0,2,0]],"start":[[0,0,0],[1,0,0]],"fragile":true,"heavy":false}],"order":[1,0,3,5,7,2,4,6]},{"size":[4,2,4],"cats":[[3,0],[0,1]],"pieces":[{"cells":[[0,0,0],[1,0,0],[2,0,0],[1,0,1],[2,0,1]],"start":[[0,0,1],[0,0,2],[0,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,0,3]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,0,3],[3,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[1,0,3],[2,0,2],[2,0,3],[1,1,2]],"start":[[0,0,0],[0,0,1],[0,1,0],[1,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,1],[3,1,1],[3,1,2],[3,1,3],[2,1,3],[2,1,2]],"start":[[0,0,0],[0,0,1],[0,1,1],[1,1,1],[0,2,1],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[1,1,0],[1,1,1],[2,1,1],[2,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,0,2],[1,0,2]],"fragile":true,"heavy":false},{"cells":[[0,1,2],[0,1,3],[1,1,3]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":true,"heavy":false}],"order":[3,2,1,4,0,6,5]},{"size":[3,2,2],"cats":[],"pieces":[{"cells":[[0,0,0],[0,0,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,0,1],[1,0,0]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[1,0,1],[1,1,1],[1,1,0],[2,1,1],[2,1,0]],"start":[[0,0,1],[0,1,0],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[1,2,0,3]},{"size":[3,2,3],"cats":[],"pieces":[{"cells":[[0,0,2],[1,0,2],[1,1,2],[2,0,2],[2,1,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[2,0,0],[1,0,1],[0,0,1]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,2,0]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0],[1,1,0],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,1,1]],"fragile":true,"heavy":false},{"cells":[[0,1,2],[0,1,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,1,3,4,2]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[2,0,0],[2,1,0],[2,2,0],[1,0,0]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1],[0,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[1,0,1],[2,0,1],[2,1,1]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[1,1,1],[1,1,0],[0,2,1]],"start":[[1,0,0],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[1,2,1],[1,2,0],[0,2,0]],"start":[[1,0,0],[2,0,0],[0,0,1],[1,0,1]],"fragile":true,"heavy":false}],"order":[2,0,1,3,4]},{"size":[3,3,2],"cats":[],"pieces":[{"cells":[[0,0,1],[0,0,0],[1,0,1],[1,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[2,0,0],[1,0,0],[2,0,1],[1,1,0]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,0],[2,2,1]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,1],[0,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,2,0],[1,2,0],[2,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":true,"heavy":false},{"cells":[[1,2,1],[0,2,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[1,2,0,3,4,5]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[0,0,0],[0,0,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[2,0,1],[1,0,2],[0,0,2]],"start":[[1,0,0],[2,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[1,0,0],[2,0,0],[2,1,0],[1,1,0],[1,2,0],[2,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[2,1,1],[1,1,1],[0,1,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[1,1,2],[1,2,2],[2,2,2],[0,1,2]],"start":[[1,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[0,2,2],[0,2,1],[1,2,1],[2,2,1]],"start":[[2,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false}],"order":[1,0,4,3,5,6,2]},{"size":[3,3,3],"cats":[],"pieces":[{"cells":[[0,0,2],[0,0,1],[1,0,2],[2,0,2],[0,0,0]],"start":[[0,0,0],[0,0,1],[0,0,2],[1,0,2],[2,0,2]],"fragile":false,"heavy":true},{"cells":[[1,0,0],[1,1,0],[2,0,0],[1,0,1],[2,0,1]],"start":[[0,0,1],[1,0,1],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[1,1,1],[1,1,2],[0,1,2],[1,2,1],[0,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[2,1,0],[2,1,2],[2,2,2]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0],[0,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":true,"heavy":false},{"cells":[[2,2,0],[1,2,0],[2,2,1]],"start":[[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[0,2,2]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false}],"order":[1,0,3,5,2,6,4]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[3,0,0],[2,0,0],[3,0,1],[3,1,0]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[0,0,0],[0,1,0],[0,0,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,1,1]],"fragile":false,"heavy":true},{"cells":[[1,0,1],[1,1,1],[1,0,2],[0,1,1],[1,2,1]],"start":[[1,0,1],[0,1,0],[0,1,1],[1,1,1],[2,1,1]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,0,2],[3,0,2],[3,1,2],[2,1,2]],"start":[[0,0,1],[0,1,0],[1,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2],[0,2,2],[1,2,2]],"start":[[0,0,0],[0,0,1],[1,0,1],[0,0,2],[1,0,2]],"fragile":true,"heavy":false},{"cells":[[2,1,1],[3,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[1,1,0],[1,2,0]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,2,2],[3,2,1],[2,2,2]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,0],[3,2,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,1],[0,2,0]],"start":[[0,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[1,3,2,9,0,4,6,5,8,7]},{"size":[4,3,3],"cats":[],"pieces":[{"cells":[[1,0,1],[1,0,0],[0,0,1],[1,0,2]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,0,2]],"fragile":false,"heavy":true},{"cells":[[3,0,2],[3,0,1],[3,1,1],[2,0,1]],"start":[[0,0,0],[1,0,0],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,1,2],[2,1,1]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[2,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":true},{"cells":[[3,1,0],[2,1,0],[1,1,0],[1,1,1],[0,1,1]],"start":[[0,0,0],[0,1,0],[0,1,1],[0,2,1],[0,3,1]],"fragile":false,"heavy":false},{"cells":[[3,1,2],[3,2,2],[3,2,1],[2,2,1]],"start":[[1,0,0],[1,0,1],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,2,1],[0,2,2],[1,2,1],[0,2,0]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,1,2]],"fragile":true,"heavy":false},{"cells":[[2,2,2],[1,2,2]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[1,2,0],[2,2,0],[3,2,0]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":false,"heavy":false}],"order":[1,5,2,3,7,0,6,4,8,10,9]},{"size":[4,2,4],"cats":[],"pieces":[{"cells":[[1,0,0],[2,0,0],[3,0,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":true},{"cells":[[3,0,3],[2,0,3],[2,0,2]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,2],[3,0,1],[2,0,1]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,0,3]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[0,0,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":true},{"cells":[[1,0,3],[1,1,3],[2,1,3]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,1,3],[1,1,2],[0,1,1],[1,1,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,1,0],[2,1,0]],"fragile":true,"heavy":false},{"cells":[[3,1,3],[3,1,2],[3,1,1],[3,1,0]],"start":[[0,0,0],[0,0,1],[0,0,2],[0,0,3]],"fragile":false,"heavy":false},{"cells":[[2,1,2],[2,1,1],[2,1,0]],"start":[[0,0,0],[0,0,1],[0,0,2]],"fragile":true,"heavy":false},{"cells":[[0,1,0],[1,1,0]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[5,2,1,4,6,0,10,8,3,9,7]},{"size":[4,3,4],"cats":[],"pieces":[{"cells":[[0,0,3],[0,1,3],[1,1,3],[0,0,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,3],[3,0,3],[1,0,3]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[1,0,1],[0,0,0]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[3,0,1],[3,0,0],[2,0,1],[2,0,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":true},{"cells":[[1,0,0],[1,1,0],[2,1,0],[0,1,0],[0,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0],[1,2,0],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[3,0,2],[1,0,2],[2,1,2]],"start":[[0,0,0],[0,1,0],[0,1,1],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[2,1,1],[3,1,1]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[1,1,1],[1,2,1],[1,1,2],[1,2,0],[2,2,0]],"start":[[0,0,0],[0,1,0],[0,1,1],[0,2,1],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[2,1,3],[3,1,3],[3,2,3]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[0,1,2],[0,2,2]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,2],[3,2,2],[2,2,2],[2,2,1],[3,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,2,2],[1,2,3],[2,2,3],[0,2,3]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,1,2]],"fragile":true,"heavy":false},{"cells":[[0,2,0],[0,2,1]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false}],"order":[2,3,9,1,8,5,6,11,0,4,10,7,12,13]},{"size":[3,2,2],"cats":[[2,1]],"pieces":[{"cells":[[0,0,1],[1,0,1],[1,0,0]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[0,0,0],[0,1,0],[1,1,0]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[1,1,1],[0,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false}],"order":[1,0,3,2]},{"size":[3,2,3],"cats":[[2,0]],"pieces":[{"cells":[[0,0,0],[1,0,0],[0,0,1]],"start":[[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":true},{"cells":[[2,0,2],[2,0,1],[1,0,2],[2,1,2],[2,1,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,1,2]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,1,1],[1,1,0],[0,1,1],[0,1,0]],"start":[[0,0,1],[0,1,0],[1,1,0],[0,1,1],[1,1,1]],"fragile":true,"heavy":false}],"order":[0,3,1,2]},{"size":[3,3,2],"cats":[[1,1]],"pieces":[{"cells":[[0,0,0],[0,0,1],[1,0,0],[2,0,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,2,0]],"fragile":false,"heavy":true},{"cells":[[2,0,1],[2,1,1],[2,1,0],[2,2,0],[2,2,1]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[1,1,0],[0,1,0],[1,2,0],[0,2,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":true,"heavy":false},{"cells":[[0,1,1],[0,2,1]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":false}],"order":[0,2,1,3]},{"size":[3,3,2],"cats":[[0,1]],"pieces":[{"cells":[[2,0,0],[1,0,0],[1,0,1]],"start":[[0,0,0],[0,0,1],[1,0,1]],"fragile":false,"heavy":false},{"cells":[[2,0,1],[2,1,1],[1,1,1]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0],[0,2,0],[1,1,0]],"start":[[0,0,1],[0,1,0],[0,1,1],[0,1,2]],"fragile":false,"heavy":false},{"cells":[[2,1,0],[2,2,0],[2,2,1]],"start":[[0,0,0],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[1,2,1]],"start":[[0,0,0],[0,0,1]],"fragile":true,"heavy":false}],"order":[0,2,1,4,3]},{"size":[3,3,3],"cats":[[2,2]],"pieces":[{"cells":[[0,0,0],[0,0,1],[1,0,0],[0,0,2]],"start":[[0,0,0],[0,1,0],[0,2,0],[1,2,0]],"fragile":false,"heavy":false},{"cells":[[1,0,1],[1,1,1],[2,1,1],[2,0,1]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[2,0,0],[2,1,0],[1,1,0],[0,1,0]],"start":[[2,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":false,"heavy":false},{"cells":[[1,0,2],[1,1,2]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":true},{"cells":[[0,1,1],[0,1,2],[0,2,1],[0,2,0],[0,2,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[2,1,0]],"fragile":true,"heavy":false},{"cells":[[1,2,2],[1,2,1],[1,2,0]],"start":[[0,0,0],[0,1,0],[0,2,0]],"fragile":false,"heavy":false},{"cells":[[2,2,1],[2,2,0]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false}],"order":[0,1,2,6,3,4,5]},{"size":[3,3,3],"cats":[[2,0]],"pieces":[{"cells":[[2,0,1],[1,0,1],[0,0,1],[0,1,1],[0,1,2]],"start":[[1,0,1],[1,1,1],[0,2,0],[0,2,1],[1,2,1]],"fragile":false,"heavy":true},{"cells":[[2,0,2],[1,0,2],[0,0,2],[1,1,2]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0],[1,0,0],[1,1,0]],"start":[[0,0,0],[0,0,1],[0,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,1,2],[2,2,2],[2,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":true,"heavy":false},{"cells":[[1,1,1],[2,1,1],[1,2,1],[1,2,2],[0,2,2]],"start":[[1,0,0],[1,1,0],[0,1,1],[1,1,1],[0,2,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[0,2,0],[0,2,1]],"start":[[0,0,0],[0,1,0],[1,1,0]],"fragile":true,"heavy":false}],"order":[1,2,0,4,3,5]},{"size":[4,3,3],"cats":[[2,2],[3,2]],"pieces":[{"cells":[[3,0,1],[3,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[1,0,0],[0,0,1],[1,1,0],[1,0,1]],"start":[[0,0,0],[1,0,0],[1,0,1],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[2,0,0],[2,0,1],[2,1,0]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[0,0,2],[0,1,2],[1,0,2],[1,1,2]],"start":[[0,0,0],[1,0,0],[0,1,0],[1,1,0]],"fragile":false,"heavy":true},{"cells":[[1,1,1],[2,1,1],[0,1,1],[3,1,1],[3,2,1]],"start":[[0,0,0],[1,0,0],[2,0,0],[3,0,0],[3,0,1]],"fragile":false,"heavy":false},{"cells":[[0,1,0],[0,2,0],[1,2,0]],"start":[[0,0,0],[1,0,0],[1,1,0]],"fragile":false,"heavy":false},{"cells":[[3,1,0],[3,2,0],[2,2,0]],"start":[[1,0,0],[0,1,0],[1,1,0]],"fragile":true,"heavy":false},{"cells":[[0,2,1],[0,2,2],[1,2,2],[1,2,1],[2,2,1]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[0,0,2]],"fragile":true,"heavy":false}],"order":[1,0,2,6,4,5,3,7]},{"size":[4,3,3],"cats":[[3,2],[1,1]],"pieces":[{"cells":[[0,0,2],[0,0,1],[0,1,1],[1,0,2]],"start":[[0,0,1],[0,1,0],[1,1,0],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,2],[2,0,1],[3,0,1],[2,1,1],[2,1,2]],"start":[[0,0,1],[1,0,1],[0,1,0],[0,1,1],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,2,0]],"start":[[1,0,0],[0,1,0],[1,1,0],[0,2,0],[1,2,0]],"fragile":false,"heavy":true},{"cells":[[3,0,0],[2,0,0]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":true},{"cells":[[1,1,2],[0,1,2],[1,2,2],[0,2,2],[2,2,2],[0,2,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[1,1,0],[1,1,1],[1,2,1]],"fragile":true,"heavy":false},{"cells":[[3,1,0],[3,1,1],[2,1,0],[3,2,1],[3,2,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[1,2,0],[2,2,0],[2,2,1]],"start":[[0,0,0],[0,0,1],[0,1,1]],"fragile":true,"heavy":false}],"order":[2,3,1,0,5,6,4]},{"size":[4,2,4],"cats":[[2,0],[3,1]],"pieces":[{"cells":[[2,0,2],[2,0,1],[3,0,2]],"start":[[0,0,0],[1,0,0],[0,0,1]],"fragile":false,"heavy":true},{"cells":[[2,0,3],[3,0,3],[2,1,3],[2,1,2],[3,1,2],[3,1,3]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[1,1,0],[1,1,1]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[0,0,2],[0,1,1],[0,1,2],[0,0,0]],"start":[[0,0,0],[1,0,0],[0,0,1],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[3,0,0],[3,1,0]],"start":[[0,0,0],[0,1,0]],"fragile":true,"heavy":false},{"cells":[[1,0,2],[1,0,1],[1,0,3]],"start":[[0,0,0],[1,0,0],[2,0,0]],"fragile":false,"heavy":false},{"cells":[[1,0,0],[1,1,0],[1,1,1],[0,1,0],[2,1,1]],"start":[[0,0,0],[0,1,0],[1,1,0],[0,1,1],[0,2,1]],"fragile":false,"heavy":true},{"cells":[[0,0,3],[0,1,3],[1,1,3],[1,1,2]],"start":[[0,0,0],[0,0,1],[1,0,1],[1,1,1]],"fragile":true,"heavy":false}],"order":[4,6,0,2,1,5,3]},{"size":[4,3,4],"cats":[[1,2],[2,1]],"pieces":[{"cells":[[3,0,0],[3,0,1],[3,1,0],[2,0,0],[3,0,2]],"start":[[0,0,1],[0,1,1],[0,2,0],[0,2,1],[1,2,1]],"fragile":false,"heavy":false},{"cells":[[0,0,3],[1,0,3]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false},{"cells":[[0,0,1],[1,0,1],[1,0,0],[0,1,1]],"start":[[1,0,0],[0,0,1],[1,0,1],[0,1,1]],"fragile":false,"heavy":false},{"cells":[[2,0,3],[2,0,2]],"start":[[0,0,0],[0,0,1]],"fragile":false,"heavy":true},{"cells":[[0,0,0],[0,1,0],[1,1,0],[1,1,1],[2,1,0]],"start":[[1,0,1],[0,1,0],[0,1,1],[1,1,1],[2,1,1]],"fragile":false,"heavy":false},{"cells":[[3,0,3],[3,1,3],[3,2,3],[2,1,3],[1,1,3]],"start":[[0,0,0],[1,0,0],[2,0,0],[1,0,1],[1,0,2]],"fragile":false,"heavy":true},{"cells":[[0,0,2],[0,1,2],[0,1,3],[0,2,3]],"start":[[0,0,0],[1,0,0],[1,0,1],[2,0,1]],"fragile":false,"heavy":false},{"cells":[[3,1,2],[3,1,1]],"start":[[0,0,0],[0,1,0]],"fragile":false,"heavy":false},{"cells":[[2,1,2],[2,2,2],[3,2,2],[3,2,1],[3,2,0]],"start":[[0,0,0],[0,1,0],[0,1,1],[1,1,1],[2,1,1]],"fragile":true,"heavy":false},{"cells":[[1,2,0],[2,2,0],[1,2,1],[0,2,1],[0,2,2],[0,2,0]],"start":[[0,0,0],[1,0,0],[2,0,0],[0,1,0],[1,1,0],[0,2,0]],"fragile":true,"heavy":false},{"cells":[[1,2,3],[2,2,3]],"start":[[0,0,0],[1,0,0]],"fragile":false,"heavy":false}],"order":[2,3,0,4,7,8,1,5,10,6,9]}];
+const LEVELS = LEVEL_DATA.map((L, i) => {
+  const r = ROOMS[Math.floor(i / PER_ROOM)], j = i % PER_ROOM;
+  const teach = j === 0 && r.gim !== 'mix';
+  return { ...L, name: `${r.name} ${j + 1}`, intro: teach ? r.gim : i === 40 ? 'mix' : null, coach: teach, tip: j === 0 && r.mix ? r.mix : '' };
+});
+const chapterOf = i => Math.floor(i / PER_ROOM);
+const COACH_TEXT = {
+  pack: '반짝이는 대로 따라 해 보세요. 짐을 고르고, 모양을 맞추고, 자리를 눌러 넣어요.',
+  fragile: '파란 그릇 위에는 아무것도 올릴 수 없어요. 그릇은 맨 위 칸에 넣어요.',
+  heavy: '갈색 책은 무거워서 상자 바닥에 닿게 넣어야 해요.',
+  cats: '고양이가 자는 칸은 비워 둬요. 나머지 칸을 채우면 돼요.',
+};
+const GIMMICKS = {
+  pack: { name: '빈틈없이 채우기', text: '짐을 골라 모양을 돌려 맞추고, 상자 위를 눌러 자리를 정한 뒤 넣기를 눌러요. 짐은 위에서 떨어지듯 들어가요. 상자를 빈칸 없이 채우면 끝!',
+    art: '<path d="M10 26 L32 16 L54 26 L54 50 L32 60 L10 50Z" fill="#c99a62"/><path d="M10 26 L32 36 L54 26" fill="none" stroke="#a5773f" stroke-width="2"/><path d="M32 36 V60" stroke="#a5773f" stroke-width="2"/><rect x="24" y="4" width="16" height="16" rx="2" fill="#ffb86b"/><path d="M32 22 v6 m-4 -4 l4 4 l4 -4" stroke="#3a3631" stroke-width="2.5" fill="none" stroke-linecap="round"/>' },
+  fragile: { name: '깨지기 쉬운 그릇', text: '파란 그릇 짐 위에는 다른 짐을 올릴 수 없어요. 그릇은 그 칸의 맨 위에 오도록 넣어 주세요.',
+    art: '<path d="M14 30 h36 l-5 18 h-26z" fill="#bfe3f2" stroke="#7fbfd8" stroke-width="2"/><path d="M20 30 q12 -10 24 0" fill="#d9f0f8"/><path d="M26 6 l12 12 M38 6 l-12 12" stroke="#e3584b" stroke-width="3.5" stroke-linecap="round"/><rect x="18" y="50" width="28" height="8" rx="2" fill="#c99a62"/>' },
+  heavy: { name: '무거운 책', text: '갈색 책 짐은 무거워서 상자 바닥에 닿아야 해요. 다른 짐 위에 올리면 넣을 수 없어요.',
+    art: '<rect x="10" y="22" width="12" height="34" rx="2" fill="#8a5a3c"/><rect x="24" y="18" width="12" height="38" rx="2" fill="#a26b45"/><rect x="38" y="26" width="14" height="30" rx="2" fill="#7a4c33"/><path d="M8 58 h48" stroke="#3a3631" stroke-width="3" stroke-linecap="round"/><path d="M27 26 h6 M27 30 h6" stroke="#f3e2c8" stroke-width="2"/>' },
+  cats: { name: '상자 속 고양이', text: '고양이가 상자 한쪽에서 자고 있어요. 고양이 칸은 비워 두고 나머지를 채워요.',
+    art: '<path d="M10 26 L32 16 L54 26 L54 50 L32 60 L10 50Z" fill="#c99a62"/><path d="M20 40 l3 -8 l5 6 h8 l5 -6 l3 8" fill="#f2b46d"/><ellipse cx="32" cy="46" rx="14" ry="8" fill="#f2b46d"/><path d="M26 44 q3 -2 5 0 M34 44 q3 -2 5 0" stroke="#3a3631" stroke-width="1.8" fill="none"/><text x="44" y="24" font-size="10" fill="#7a7066" font-family="sans-serif">z</text>' },
+};
+GIMMICKS.mix = { name: '짐 섞기', text: '여기부터는 상자가 커지고, 배운 짐들이 함께 나와요. 막히면 힌트가 정답 순서대로 다음 할 일을 알려줘요.',
+  art: '<path d="M8 28 L32 18 L56 28 L56 52 L32 62 L8 52Z" fill="#c99a62"/><rect x="14" y="8" width="12" height="12" rx="2" fill="#bfe3f2"/><rect x="28" y="4" width="12" height="16" rx="2" fill="#9a6644"/><ellipse cx="46" cy="16" rx="8" ry="5" fill="#f2b46d"/>' };
+const GIMMICK_ORDER = ['pack', 'fragile', 'heavy', 'cats', 'mix'];
+
+// ---------- save ----------
+const SAVE_KEY = 'capy-pack:v1';   // shared localStorage on starone99.github.io, so keys carry a game prefix
+function loadSave() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage unavailable: play without records */ }
+  if (!s || typeof s.levels !== 'object') s = { levels: {}, sound: true, seen: {} };
+  if (typeof s.seen !== 'object' || !s.seen) s.seen = {};
+  return s;
+}
+const save = loadSave();
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* storage unavailable */ } }
+const isCleared = i => !!save.levels[i];
+const isOpen = i => i === 0 || isCleared(i - 1);
+const flowersFor = undos => (undos === 0 ? 3 : undos <= 2 ? 2 : 1);
+
+// ---------- sound ----------
+let mode = 'title';
+const Sound = {
+  ctx: null, master: null, noiseBuf: null,
+  ensure() {
+    if (!save.sound) return null;
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(this.ctx.destination);
+      this.noiseBuf = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  },
+  tone(freq, dur, { type = 'sine', gain = 0.12, to = null, delay = 0 } = {}) {
+    if (mode === 'title') return;
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.05);
+  },
+  noise(dur, { freq = 1000, q = 1, gain = 0.1, delay = 0, type = 'bandpass', to = null } = {}) {
+    if (mode === 'title') return;
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = ctx.currentTime + delay, src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  },
+  pickUp() { this.tone(520, 0.1, { type: 'triangle', gain: 0.07, to: 700 }); },
+  turn() { this.noise(0.1, { freq: 1800, q: 1.2, gain: 0.06 }); this.tone(440, 0.06, { type: 'triangle', gain: 0.04 }); },
+  thunk(d = 0) { this.tone(140, 0.16, { type: 'triangle', gain: 0.16, to: 90, delay: d }); this.noise(0.12, { freq: 400, q: 0.8, gain: 0.08, delay: d }); },
+  clink(d = 0) { this.tone(2093, 0.25, { gain: 0.04, delay: d }); this.tone(2637, 0.3, { gain: 0.03, delay: d + 0.06 }); },
+  nope() { this.tone(220, 0.14, { type: 'triangle', gain: 0.08, to: 180 }); },
+  undo() { this.tone(600, 0.1, { type: 'triangle', gain: 0.06, to: 400 }); },
+  purr() { for (let i = 0; i < 4; i++) this.tone(60, 0.12, { type: 'sawtooth', gain: 0.02, delay: i * 0.13 }); },
+  tape(d = 0) { this.noise(0.55, { freq: 2500, q: 0.6, gain: 0.08, delay: d, to: 5000 }); },
+  chime(d = 0) { [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.7, { gain: 0.07, delay: d + i * 0.11 })); },
+  setOn(on) { save.sound = on; writeSave(); if (this.master) this.master.gain.value = on ? 0.9 : 0; if (on) this.ensure(); },
+};
+
+// ---------- three.js scene ----------
+const canvas = $('#scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 100);
+scene.add(new THREE.HemisphereLight(0xfff6ea, 0xd9c4a8, 0.9));
+const sun = new THREE.DirectionalLight(0xfff0dc, 0.65);
+sun.position.set(4, 10, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 30 });
+sun.shadow.bias = -0.0015;
+scene.add(sun);
+const pivot = new THREE.Group(); scene.add(pivot);
+const matCache = new Map();
+const M = (color, opts) => { const k = color + JSON.stringify(opts || {}); if (!matCache.has(k)) matCache.set(k, new THREE.MeshLambertMaterial({ color, ...(opts || {}) })); return matCache.get(k); };
+function mesh(geo, mat, { cast = true, receive = true } = {}) { const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = receive; return m; }
+const box3 = (w, h, d, mat, o) => mesh(new THREE.BoxGeometry(w, h, d), mat, o);
+const sph = (r, mat, o) => mesh(new THREE.SphereGeometry(r, 16, 12), mat, o);
+const cyl = (rt, rb, h, mat, seg = 16, o) => mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat, o);
+
+const PALETTE = [0xffb86b, 0x8fd19a, 0xf7a8b8, 0xa9c8f0, 0xf5d36b, 0xc5a8ec, 0x9ad6d0, 0xf2a07b, 0xb8d98a];
+const PIECE_HEX = ['#ffb86b', '#8fd19a', '#f7a8b8', '#a9c8f0', '#f5d36b', '#c5a8ec', '#9ad6d0', '#f2a07b', '#b8d98a'];
+const FRAGILE = 0xbfe3f2, HEAVY = 0x9a6644;
+const colorOf = (p, i) => (p.fragile ? FRAGILE : p.heavy ? HEAVY : PALETTE[i % PALETTE.length]);
+const hexOf = (p, i) => (p.fragile ? '#bfe3f2' : p.heavy ? '#9a6644' : PIECE_HEX[i % PIECE_HEX.length]);
+
+function makeCapy() {
+  const g = new THREE.Group();
+  const fur = M(0xb07a4f), dark = M(0x7a5233), ink = M(0x2b2420);
+  const body = sph(0.5, fur); body.scale.set(0.52, 0.36, 0.34); body.position.set(-0.04, 0.2, 0); g.add(body);
+  const head = mesh(new THREE.CapsuleGeometry(0.115, 0.17, 6, 12), fur); head.rotation.z = Math.PI / 2; head.position.set(0.22, 0.33, 0); g.add(head);
+  const snout = sph(0.5, dark); snout.scale.set(0.13, 0.17, 0.19); snout.position.set(0.38, 0.3, 0); g.add(snout);
+  g.userData.eyes = [];
+  for (const s of [-1, 1]) {
+    const ear = sph(0.5, dark); ear.scale.set(0.06, 0.075, 0.045); ear.position.set(0.14, 0.45, s * 0.08); g.add(ear);
+    const eye = sph(0.5, ink, { cast: false }); eye.scale.set(0.036, 0.036, 0.036); eye.position.set(0.3, 0.375, s * 0.098); g.add(eye); g.userData.eyes.push(eye);
+    for (const fx of [-0.17, 0.1]) { const leg = cyl(0.035, 0.035, 0.12, dark, 8); leg.position.set(fx, 0.06, s * 0.09); g.add(leg); }
+  }
+  const tape = cyl(0.09, 0.09, 0.05, M(0xd8c79a), 16); tape.rotation.x = Math.PI / 2; tape.position.set(0.05, 0.52, 0); g.add(tape);
+  return g;
+}
+function makeCat() {
+  const g = new THREE.Group();
+  const furM = M(0xf2b46d), darkM = M(0xd98a3d), ink = M(0x2b2420);
+  const body = sph(0.5, furM); body.scale.set(0.42, 0.24, 0.34); body.position.set(0, 0.13, 0); g.add(body);
+  const head = sph(0.13, furM); head.position.set(0.16, 0.2, 0.06); g.add(head);
+  for (const s of [-1, 1]) {
+    const ear = mesh(new THREE.ConeGeometry(0.045, 0.08, 4), darkM); ear.position.set(0.16, 0.33, 0.06 + s * 0.065); g.add(ear);
+    const eye = box3(0.012, 0.012, 0.04, ink, { cast: false }); eye.position.set(0.28, 0.22, 0.06 + s * 0.045); g.add(eye);
+  }
+  const tail = mesh(new THREE.TorusGeometry(0.17, 0.035, 8, 20, Math.PI * 1.1), darkM); tail.rotation.x = Math.PI / 2; tail.position.set(-0.02, 0.08, 0); g.add(tail);
+  return g;
+}
+
+// ---------- level state ----------
+let L = null, box = null, levelIndex = 0, undos = 0, placedOrder = [], selected = -1, shape = null, anchor = [0, 0], won = false;
+let objs = [], pieceMeshes = new Map(), ghost = null, targetGlow = null, flaps = [], tape = null, capy = null, columnPlane = null;
+let coach = null, hintUntil = 0, viewQ = 0, viewRot = 0, drops = [];
+const SHAPES = [];   // current orientation per piece
+function add(o) { pivot.add(o); objs.push(o); return o; }
+function clearScene() { for (const o of objs) pivot.remove(o); objs = []; pieceMeshes = new Map(); flaps = []; ghost = null; targetGlow = null; drops = []; }
+let OX = 0, OZ = 0;
+const cellPos = (x, y, z) => new THREE.Vector3(x + OX, y + 0.5, z + OZ);
+
+function buildLevel(i) {
+  clearScene();
+  levelIndex = i; L = LEVELS[i];
+  const room = ROOMS[chapterOf(i)];
+  document.documentElement.style.setProperty('--sky-top', room.sky[0]);
+  document.documentElement.style.setProperty('--sky-bot', room.sky[1]);
+  box = makeBox(L);
+  undos = 0; placedOrder = []; selected = -1; won = false; coach = null; hintUntil = 0;
+  L.pieces.forEach((p, k) => { SHAPES[k] = normalize(p.start); });
+  SHAPES.length = L.pieces.length;
+  OX = -(box.W - 1) / 2; OZ = -(box.D - 1) / 2;
+  // room floor and rug
+  const floor = mesh(new THREE.CylinderGeometry(Math.max(box.W, box.D) + 2.4, Math.max(box.W, box.D) + 2.4, 0.2, 48), M(0xe8d7bf), { cast: false });
+  floor.position.y = -0.16; add(floor);
+  const rug = mesh(new THREE.CylinderGeometry(Math.max(box.W, box.D) * 0.85 + 0.8, Math.max(box.W, box.D) * 0.85 + 0.8, 0.04, 40), M(room.rug), { cast: false });
+  rug.position.y = -0.04; add(rug);
+  // the box: kraft floor, see-through walls with solid edges, open flaps
+  const kraft = M(0xc99a62), kraftDeep = M(0xa5773f);
+  const bottom = box3(box.W + 0.12, 0.08, box.D + 0.12, kraft); bottom.position.y = -0.02; add(bottom);
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0xe3c79c, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide });
+  const walls = [
+    [box.W + 0.12, box.H, 0.06, 0, -box.D / 2 - 0.03], [box.W + 0.12, box.H, 0.06, 0, box.D / 2 + 0.03],
+    [0.06, box.H, box.D + 0.12, -box.W / 2 - 0.03, 0], [0.06, box.H, box.D + 0.12, box.W / 2 + 0.03, 0],
+  ];
+  for (const [w, h, d, x, z] of walls) {
+    const m = mesh(new THREE.BoxGeometry(w, h, d), wallMat, { cast: false, receive: false }); m.position.set(x, h / 2, z); m.renderOrder = 2; add(m);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), new THREE.LineBasicMaterial({ color: 0xa5773f })); edges.position.copy(m.position); add(edges);
+  }
+  // layer guides on the walls and a floor grid
+  const guide = new THREE.LineBasicMaterial({ color: 0xa5773f, transparent: true, opacity: 0.35 });
+  const pts = [];
+  for (let x = 0; x <= box.W; x++) pts.push(new THREE.Vector3(x - box.W / 2, 0.03, -box.D / 2), new THREE.Vector3(x - box.W / 2, 0.03, box.D / 2));
+  for (let z = 0; z <= box.D; z++) pts.push(new THREE.Vector3(-box.W / 2, 0.03, z - box.D / 2), new THREE.Vector3(box.W / 2, 0.03, z - box.D / 2));
+  for (let y = 1; y < box.H; y++) for (const [a, b] of [[[-1, -1], [1, -1]], [[-1, -1], [-1, 1]]]) pts.push(new THREE.Vector3(a[0] * box.W / 2, y, a[1] * box.D / 2), new THREE.Vector3(b[0] * box.W / 2, y, b[1] * box.D / 2));
+  add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), guide));
+  // flaps hinge on the top edges
+  const flapDefs = [[box.W, box.D / 2, [0, -box.D / 2], 'x', -1], [box.W, box.D / 2, [0, box.D / 2], 'x', 1], [box.D, box.W / 2, [-box.W / 2, 0], 'z', -1], [box.D, box.W / 2, [box.W / 2, 0], 'z', 1]];
+  for (const [len, depth, [hx, hz], axis, sgn] of flapDefs) {
+    const hinge = new THREE.Group(); hinge.position.set(hx, box.H, hz);
+    const f = box3(axis === 'x' ? len : depth, 0.04, axis === 'x' ? depth : len, kraftDeep, { cast: false });
+    if (axis === 'x') f.position.z = -sgn * depth / 2; else f.position.x = -sgn * depth / 2;
+    hinge.add(f); add(hinge);
+    flaps.push({ hinge, axis, sgn });
+  }
+  tape = box3(0.3, 0.02, box.D + 0.2, M(0xd8c79a), { cast: false }); tape.position.y = box.H + 0.05; tape.visible = false; add(tape);
+  // cats sleep in their columns; the space above them is kept free
+  for (const [x, z] of L.cats || []) {
+    const cat = makeCat(); cat.position.copy(cellPos(x, 0, z)).setY(0.02); cat.rotation.y = Math.random() * TAU; add(cat);
+    const zone = mesh(new THREE.BoxGeometry(0.94, box.H, 0.94), new THREE.MeshLambertMaterial({ color: 0xffc7d1, transparent: true, opacity: 0.18, depthWrite: false }), { cast: false, receive: false });
+    zone.position.copy(cellPos(x, 0, z)).setY(box.H / 2); add(zone);
+  }
+  capy = makeCapy(); capy.position.set(box.W / 2 + 0.9, -0.04, box.D / 2 + 0.2); capy.rotation.y = Math.PI * 0.85; add(capy);
+  // invisible plane at the top of the box for picking columns
+  columnPlane = new THREE.Mesh(new THREE.PlaneGeometry(box.W + 8, box.D + 8), new THREE.MeshBasicMaterial({ visible: false }));
+  columnPlane.rotation.x = -Math.PI / 2; columnPlane.position.y = box.H; add(columnPlane);
+  viewQ = 0; viewRot = 0; pivot.rotation.y = 0;
+  fitCamera();
+  renderTray();
+  if (L.pieces.length) selectPiece(firstUnplaced());
+  updateHUD();
+}
+const firstUnplaced = () => L.pieces.findIndex((_, k) => !placedOrder.includes(k));
+
+// ---------- pieces ----------
+function cubeMesh(color, opts) {
+  const m = box3(0.94, 0.94, 0.94, M(color, opts));
+  return m;
+}
+function addPieceMesh(k, cells) {
+  const g = new THREE.Group();
+  const p = L.pieces[k];
+  for (const [x, y, z] of cells) {
+    const c = cubeMesh(colorOf(p, k), p.fragile ? { transparent: true, opacity: 0.85 } : undefined);
+    c.position.copy(cellPos(x, y, z));
+    g.add(c);
+    if (p.heavy) { const stripe = box3(0.96, 0.08, 0.96, M(0xf3e2c8), { cast: false }); stripe.position.copy(c.position).add(new THREE.Vector3(0, 0.22, 0)); g.add(stripe); }
+    if (p.fragile) { const rim = box3(0.96, 0.06, 0.96, M(0xffffff), { cast: false }); rim.position.copy(c.position).add(new THREE.Vector3(0, 0.44, 0)); g.add(rim); }
+  }
+  add(g); pieceMeshes.set(k, g);
+  g.position.y = 2.2; drops.push({ g, t: 0 });
+}
+function selectPiece(k) {
+  if (k < 0 || placedOrder.includes(k)) { selected = -1; updateGhost(); renderTray(); return; }
+  selected = k; shape = SHAPES[k];
+  // start at the first spot where it fits, so the preview is useful right away
+  anchor = bestStart(shape);
+  Sound.pickUp();
+  renderTray(); updateGhost(); updateCoach();
+}
+function footprint(cs) { return [Math.max(...cs.map(c => c[0])) + 1, Math.max(...cs.map(c => c[2])) + 1]; }
+function clampAnchor([ax, az], cs) { const [fw, fd] = footprint(cs); return [Math.max(0, Math.min(box.W - fw, ax)), Math.max(0, Math.min(box.D - fd, az))]; }
+function bestStart(cs) {
+  for (let z = 0; z < box.D; z++) for (let x = 0; x < box.W; x++) { const a = clampAnchor([x, z], cs); const l = landing(box, cs, a[0], a[1], L.pieces[selected], L.pieces); if (l.ok && !l.holes) return a; }
+  return clampAnchor([0, 0], cs);
+}
+function turn(name) {
+  if (selected < 0 || won) return;
+  SHAPES[selected] = shape = TURNS[name](shape);
+  anchor = clampAnchor(anchor, shape);
+  Sound.turn();
+  renderTray(); updateGhost(); updateCoach();
+}
+let lastLand = null;
+// the preview draws on top of everything so it never hides behind packed pieces
+const ghostMat = color => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false, depthTest: false });
+const GHOST_MAT = { ok: ghostMat(0x3fbf7f), warn: ghostMat(0x7a6cff), bad: ghostMat(0xe3584b) };
+function updateGhost() {
+  if (ghost) { pivot.remove(ghost); objs = objs.filter(o => o !== ghost); ghost = null; }
+  lastLand = null;
+  if (selected < 0 || won || mode !== 'play') { setNote(''); $('#placeBtn').disabled = true; return; }
+  const land = landing(box, shape, anchor[0], anchor[1], L.pieces[selected], L.pieces);
+  lastLand = land;
+  ghost = new THREE.Group();
+  const kind = !land.ok ? 'bad' : land.holes ? 'warn' : 'ok';
+  const cells = land.cells || shape.map(([x, y, z]) => [anchor[0] + x, box.H + y, anchor[1] + z]);
+  for (const [x, y, z] of cells) {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.98, 0.98), GHOST_MAT[kind]); c.position.copy(cellPos(x, y, z)); c.renderOrder = 3; ghost.add(c);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.98, 0.98, 0.98)), new THREE.LineBasicMaterial({ color: kind === 'bad' ? 0xb8322a : 0x1f3b2c, depthTest: false })); e.position.copy(c.position); e.renderOrder = 4; ghost.add(e);
+  }
+  add(ghost);
+  const why = { out: '상자 밖으로 나가요', tall: '상자 위로 튀어나와요. 돌려서 눕혀 보세요', heavy: '무거운 책은 바닥에 닿아야 해요', fragile: '그릇 위에는 올릴 수 없어요' };
+  if (!land.ok) { setNote(why[land.why], true); $('#dockNote').style.color = 'var(--warn)'; } else $('#dockNote').style.color = '';
+  if (!land.ok) {}
+  else if (land.holes) setNote(`이대로 넣으면 아래에 빈칸 ${land.holes}개가 갇혀요`, true);
+  else setNote('여기에 쏙 들어가요');
+  $('#placeBtn').disabled = !land.ok;
+}
+function setNote(text, warn) { const n = $('#dockNote'); n.textContent = text; n.classList.toggle('warn', !!warn); }
+function place() {
+  if (selected < 0 || won || !lastLand || !lastLand.ok) { Sound.nope(); return; }
+  const k = selected, land = lastLand;
+  for (const c of land.cells) box.filled.set(keyC(c), k);
+  placedOrder.push(k);
+  addPieceMesh(k, land.cells);
+  if (L.pieces[k].fragile) Sound.clink(0.25); else Sound.thunk(0.25);
+  if (land.holes) toast('아래에 빈칸이 갇혔어요. 되돌리기로 다시 넣어 보세요');
+  if (solvedBox(box)) { won = true; selected = -1; updateGhost(); renderTray(); finishBox(); return; }
+  selectPiece(firstUnplaced());
+  updateHUD();
+}
+function undo() {
+  if (won || !placedOrder.length) return;
+  const k = placedOrder.pop();
+  for (const [key, v] of [...box.filled]) if (v === k) box.filled.delete(key);
+  const g = pieceMeshes.get(k); pivot.remove(g); objs = objs.filter(o => o !== g); pieceMeshes.delete(k);
+  undos++;
+  Sound.undo();
+  selectPiece(k);
+  updateHUD();
+}
+function finishBox() {
+  Sound.thunk(0.2); Sound.tape(0.9); Sound.chime(1.5);
+  closeT = 0;
+  setTimeout(() => { if (mode === 'play' && won) showClear(); }, 2300);
+  updateHUD();
+}
+let closeT = -1;
+
+// iso drawing of a piece for the tray, turned to match the current view
+function pieceSVG(cs, color, view) {
+  const turned = cs.map(([x, y, z]) => { let p = [x, y, z]; for (let i = 0; i < ((view % 4) + 4) % 4; i++) p = [p[2], p[1], -p[0]]; return p; });
+  const n = normalize(turned);
+  const s = 12, iso = ([x, y, z]) => [(x - z) * s * 0.87, (x + z) * s * 0.5 - y * s];
+  const shade = (hex, f) => { const v = parseInt(hex.slice(1), 16); const ch = sh => Math.max(0, Math.min(255, Math.round(((v >> sh) & 255) * f))); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+  const order = n.slice().sort((a, b) => (a[0] + a[2]) - (b[0] + b[2]) || a[1] - b[1]);
+  let out = '', minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (const c of order) {
+    const [x, y, z] = c;
+    const P = (dx, dy, dz) => iso([x + dx, y + dy, z + dz]);
+    const top = [P(0, 1, 0), P(1, 1, 0), P(1, 1, 1), P(0, 1, 1)];
+    const right = [P(1, 1, 0), P(1, 1, 1), P(1, 0, 1), P(1, 0, 0)];
+    const left = [P(0, 1, 1), P(1, 1, 1), P(1, 0, 1), P(0, 0, 1)];
+    for (const [poly, f] of [[left, 0.78], [right, 0.9], [top, 1.08]]) {
+      out += `<polygon points="${poly.map(p => p.join(',')).join(' ')}" fill="${shade(color, f)}" stroke="#3a3631" stroke-width="1" stroke-linejoin="round"/>`;
+      for (const [px, py] of poly) { minx = Math.min(minx, px); maxx = Math.max(maxx, px); miny = Math.min(miny, py); maxy = Math.max(maxy, py); }
+    }
+  }
+  return `<svg viewBox="${minx - 2} ${miny - 2} ${maxx - minx + 4} ${maxy - miny + 4}" aria-hidden="true">${out}</svg>`;
+}
+function renderTray() {
+  $('#tray').replaceChildren(...L.pieces.map((p, k) => {
+    if (placedOrder.includes(k)) return null;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'item'; b.dataset.k = k;
+    b.setAttribute('aria-pressed', String(k === selected));
+    b.setAttribute('aria-label', `${p.fragile ? '그릇 ' : p.heavy ? '책 ' : ''}짐 ${k + 1}, 칸 ${p.cells.length}개`);
+    b.innerHTML = pieceSVG(SHAPES[k], hexOf(p, k), -viewQ) + (p.fragile ? '<span class="tag">그릇</span>' : p.heavy ? '<span class="tag">책</span>' : '');
+    b.addEventListener('click', () => { Sound.ensure(); selectPiece(k); });
+    return b;
+  }).filter(Boolean));
+}
+
+// ---------- coach and hint: follow the stored solution while the box still matches it ----------
+function nextStep() {
+  for (const k of placedOrder) {
+    const want = new Set(L.pieces[k].cells.map(keyC));
+    const got = [...box.filled].filter(([, v]) => v === k).map(([key]) => key);
+    if (got.length !== want.size || got.some(key => !want.has(key))) return { kind: 'undo' };
+  }
+  const k = L.order.find(i => !placedOrder.includes(i));
+  if (k === undefined) return null;
+  if (selected !== k) return { kind: 'select', k };
+  const target = normalize(L.pieces[k].cells);
+  const turns = turnsBetween(shape, target);
+  if (turns && turns.length) return { kind: 'turn', name: turns[0], k };
+  const ax = Math.min(...L.pieces[k].cells.map(c => c[0])), az = Math.min(...L.pieces[k].cells.map(c => c[2]));
+  if (anchor[0] !== ax || anchor[1] !== az) return { kind: 'move', k, cells: L.pieces[k].cells, at: [ax, az] };
+  return { kind: 'place', k };
+}
+function updateCoach() {
+  document.querySelectorAll('.coach').forEach(e => e.classList.remove('coach'));
+  if (targetGlow) { pivot.remove(targetGlow); objs = objs.filter(o => o !== targetGlow); targetGlow = null; }
+  coach = null;
+  if (mode !== 'play' || won) return;
+  if (!L.coach && performance.now() > hintUntil) return;
+  coach = nextStep();
+  if (!coach) return;
+  const say = {
+    undo: '정답과 다르게 넣은 짐이 있어요. 되돌리기를 눌러 보세요.',
+    select: '반짝이는 짐을 골라 보세요.',
+    turn: `${{ yaw: '돌리기', pitch: '세우기', roll: '눕히기' }[coach.name]} 버튼으로 모양을 맞춰요.`,
+    move: '상자 위의 노란 자리를 눌러 짐을 옮겨요.',
+    place: '좋아요! 넣기를 눌러요.',
+  }[coach.kind];
+  if (L.coach) setTip(say); else toast(say);
+  if (coach.kind === 'undo') $('#undoBtn').classList.add('coach');
+  if (coach.kind === 'select') { const el = document.querySelector(`.item[data-k="${coach.k}"]`); if (el) { el.classList.add('coach'); el.scrollIntoView({ block: 'nearest', inline: 'center' }); } }
+  if (coach.kind === 'turn') document.querySelector(`[data-turn="${coach.name}"]`).classList.add('coach');
+  if (coach.kind === 'place') $('#placeBtn').classList.add('coach');
+  if (coach.kind === 'move') {
+    targetGlow = new THREE.Group();
+    for (const [x, y, z] of coach.cells) { const c = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffc83d, transparent: true, opacity: 0.35, depthWrite: false })); c.position.copy(cellPos(x, y, z)); targetGlow.add(c); }
+    add(targetGlow);
+  }
+}
+$('#hintBtn').addEventListener('click', () => { if (mode !== 'play' || won) return; hintUntil = performance.now() + 5000; updateCoach(); setTimeout(updateCoach, 5100); });
+
+// ---------- camera ----------
+function fitCamera() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  renderer.setSize(w, h, false);
+  const dockH = $('#dock').hidden ? 0 : $('#dock').offsetHeight;
+  document.documentElement.style.setProperty('--dock-h', `${dockH}px`);
+  const W = box ? box.W : 3, D = box ? box.D : 3, H = box ? box.H : 3;
+  const span = (W + D) * 0.72 + 3.2, tall = (W + D) * 0.42 + H * 0.85 + 2.2;
+  // keep room for the HUD above and the dock below
+  const usable = Math.max(0.35, 1 - (dockH + 150) / h);
+  const fh = Math.max(tall / usable, span / aspect);
+  camera.left = -fh * aspect / 2; camera.right = fh * aspect / 2; camera.top = fh / 2; camera.bottom = -fh / 2;
+  camera.updateProjectionMatrix();
+  const shift = ((dockH - 150) / h) * fh * 0.5;
+  camera.position.set(10, 9.5 + H * 0.3, 10);
+  camera.lookAt(0, H * 0.35 - shift * 0.9, 0);
+}
+window.addEventListener('resize', fitCamera);
+
+// ---------- input ----------
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function columnAt(e) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObject(columnPlane, false)[0];
+  if (!hit) return null;
+  const p = pivot.worldToLocal(hit.point.clone());
+  return [Math.floor(p.x + box.W / 2), Math.floor(p.z + box.D / 2)];
+}
+function moveTo(col) {
+  if (!col || selected < 0) return;
+  // put the piece's footprint centre under the finger
+  const [fw, fd] = footprint(shape);
+  const a = clampAnchor([col[0] - Math.floor((fw - 1) / 2), col[1] - Math.floor((fd - 1) / 2)], shape);
+  if (a[0] !== anchor[0] || a[1] !== anchor[1]) { anchor = a; updateGhost(); updateCoach(); }
+}
+let drag = null, lastTap = 0;
+canvas.addEventListener('pointerdown', e => {
+  Sound.ensure();
+  if (mode !== 'play') return;
+  canvas.setPointerCapture(e.pointerId);
+  const col = columnAt(e);
+  const onBox = col && col[0] >= -1 && col[1] >= -1 && col[0] <= box.W && col[1] <= box.D;
+  drag = { x: e.clientX, rot: viewRot, place: onBox && selected >= 0, moved: false };
+  if (drag.place) moveTo(col);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  if (drag.place) { moveTo(columnAt(e)); return; }
+  const dx = e.clientX - drag.x;
+  if (Math.abs(dx) > 8) { drag.moved = true; viewRot = drag.rot + dx * 0.01; }
+});
+canvas.addEventListener('pointerup', () => {
+  if (drag && !drag.place && drag.moved) { viewQ = Math.round(viewRot / (Math.PI / 2)); renderTray(); }
+  if (drag && drag.place) { const now = performance.now(); if (now - lastTap < 320) place(); lastTap = now; }
+  drag = null;
+});
+canvas.addEventListener('pointercancel', () => { drag = null; });
+function turnView(d) { viewQ += d; renderTray(); }
+$('#viewL').addEventListener('click', () => turnView(-1));
+$('#viewR').addEventListener('click', () => turnView(1));
+document.querySelectorAll('[data-turn]').forEach(b => b.addEventListener('click', () => turn(b.dataset.turn)));
+$('#placeBtn').addEventListener('click', place);
+$('#undoBtn').addEventListener('click', undo);
+$('#resetBtn').addEventListener('click', () => startLevel(levelIndex, true));
+document.addEventListener('keydown', e => {
+  if (mode !== 'play') return;
+  const mv = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.code];
+  if (mv && selected >= 0) { e.preventDefault(); anchor = clampAnchor([anchor[0] + mv[0], anchor[1] + mv[1]], shape); updateGhost(); updateCoach(); }
+  if (e.code === 'KeyQ') turn('yaw'); if (e.code === 'KeyW') turn('pitch'); if (e.code === 'KeyE') turn('roll');
+  if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); place(); }
+  if (e.code === 'KeyZ' || e.code === 'Backspace') undo();
+  if (e.code === 'Tab') { e.preventDefault(); const left = L.pieces.map((_, k) => k).filter(k => !placedOrder.includes(k)); if (left.length) selectPiece(left[(left.indexOf(selected) + 1) % left.length]); }
+});
+
+// ---------- UI ----------
+let toastTimer = 0;
+function toast(text) { const t = $('#toast'); t.textContent = text; t.hidden = false; t.style.animation = 'none'; void t.offsetWidth; t.style.animation = ''; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600); }
+let tipOpen = false;
+function setTip(text) { $('#tipText').textContent = text; tipOpen = true; $('#tip').hidden = mode !== 'play'; }
+function hideTip() { tipOpen = false; $('#tip').hidden = true; }
+$('#tip').addEventListener('click', hideTip);
+function updateHUD() {
+  if (!L || !(mode === 'play' || mode === 'clear' || mode === 'intro')) return;
+  $('#stageTitle').textContent = `${levelIndex + 1}. ${L.name}`;
+  $('#moveLabel').textContent = `되돌리기 ${undos}번 · 짐 ${placedOrder.length}/${L.pieces.length}`;
+  const empty = box.cells - box.filled.size;
+  const chips = [`<span class="goal ${empty === 0 ? 'done' : ''}"><i style="background:#c99a62"></i>${empty === 0 ? '상자가 꽉 찼어요' : `빈칸 ${empty}개 남음`}</span>`];
+  if (L.pieces.some(p => p.fragile)) chips.push('<span class="goal"><i style="background:#bfe3f2"></i>그릇 위엔 짐 금지</span>');
+  if (L.pieces.some(p => p.heavy)) chips.push('<span class="goal"><i style="background:#9a6644"></i>책은 바닥에</span>');
+  if ((L.cats || []).length) chips.push('<span class="goal"><i style="background:#f2b46d"></i>고양이 칸 비우기</span>');
+  $('#goals').innerHTML = chips.join('');
+  $('#undoBtn').disabled = !placedOrder.length || won;
+}
+function renderSound() {
+  $('#soundBtn').setAttribute('aria-label', save.sound ? '소리 끄기' : '소리 켜기');
+  $('#soundIcon').innerHTML = save.sound ? '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>' : '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>';
+}
+$('#soundBtn').addEventListener('click', () => { Sound.setOn(!save.sound); renderSound(); });
+function flowerIcons(n, total = 3, cls = '') { let s = ''; for (let i = 0; i < total; i++) s += `<svg class="${i < n ? 'f-on ' + cls : 'f-off'}" style="animation-delay:${i * 0.15}s" aria-hidden="true"><use href="#flower"/></svg>`; return s; }
+function totals() { const recs = Object.values(save.levels); return { done: recs.length, fl: recs.reduce((s, r) => s + r.flowers, 0) }; }
+function progressText() { const t = totals(); return t.done ? `상자 ${t.done}/${LEVELS.length} · 꽃 ${t.fl}/${LEVELS.length * 3}` : '기록은 이 브라우저에 저장돼요'; }
+function showScreen(name) {
+  mode = name;
+  for (const id of ['title', 'select', 'clear', 'intro', 'dex']) $('#' + id).hidden = name !== id;
+  $('#hud').hidden = !(name === 'play' || name === 'clear' || name === 'intro');
+  $('#dock').hidden = $('#sideL').hidden = $('#sideR').hidden = name !== 'play';
+  $('#tip').hidden = name !== 'play' || !tipOpen;
+  if (name !== 'play') $('#toast').hidden = true;
+  fitCamera();
+  updateGhost();
+}
+function firstUnfinished() { for (let i = 0; i < LEVELS.length; i++) if (!isCleared(i)) return i; return LEVELS.length - 1; }
+function startLevel(i, restart) {
+  tipOpen = false;
+  if (LEVELS[i].coach) setTip(COACH_TEXT[LEVELS[i].intro]);
+  else if (LEVELS[i].tip) setTip(LEVELS[i].tip);
+  if (LEVELS[i].intro && !save.seen[LEVELS[i].intro] && !restart) { buildLevel(i); showIntro(LEVELS[i].intro, true); }
+  else { mode = 'play'; buildLevel(i); showScreen('play'); }
+  updateHUD(); updateCoach();
+}
+function showIntro(key, beforePlay) {
+  const g = GIMMICKS[key];
+  $('#introTag').textContent = key === 'pack' ? '게임 목표' : beforePlay ? '새로운 짐' : '짐싸기 도감';
+  $('#introArt').innerHTML = g.art; $('#introTitle').textContent = g.name; $('#introText').textContent = g.text;
+  $('#introGo').textContent = beforePlay ? '해볼게요' : '닫기';
+  $('#introGo').onclick = () => { if (beforePlay) { save.seen[key] = true; writeSave(); showScreen('play'); updateCoach(); } else openDex(); };
+  showScreen('intro'); $('#introGo').focus();
+}
+let dexFrom = 'play';
+function openDex() {
+  if (mode !== 'dex' && mode !== 'intro') dexFrom = mode;
+  const reach = Math.max(firstUnfinished(), mode === 'play' ? levelIndex : 0);
+  const open = new Set(LEVELS.slice(0, reach + 1).map(l => l.intro).filter(Boolean).concat(Object.keys(save.seen)));
+  $('#dexList').replaceChildren(...GIMMICK_ORDER.map(k => {
+    const g = GIMMICKS[k], el = document.createElement('button');
+    el.type = 'button'; el.className = 'dex-item' + (open.has(k) ? '' : ' locked'); el.disabled = !open.has(k);
+    el.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true">${open.has(k) ? g.art : '<circle cx="32" cy="32" r="22" fill="#e8dfd2"/>'}</svg><span><b></b><small></small></span>`;
+    el.querySelector('b').textContent = open.has(k) ? g.name : '아직 못 만났어요';
+    el.querySelector('small').textContent = open.has(k) ? g.text : '방을 지나가면 만날 수 있어요';
+    if (open.has(k)) el.addEventListener('click', () => showIntro(k, false));
+    return el;
+  }));
+  showScreen('dex');
+}
+$('#helpBtn').addEventListener('click', openDex);
+$('#closeDex').addEventListener('click', () => { if (dexFrom === 'play') { showScreen('play'); updateCoach(); } else if (dexFrom === 'select') openSelect(); else showTitle(); });
+let selectFrom = 'title', selectChapter = 0;
+function openSelect() { if (mode !== 'select' && mode !== 'dex') selectFrom = mode; selectChapter = chapterOf(mode === 'play' || mode === 'clear' ? levelIndex : firstUnfinished()); renderSelect(); showScreen('select'); }
+function renderSelect() {
+  const next = firstUnfinished();
+  $('#chapters').replaceChildren(...ROOMS.map((r, k) => {
+    const el = document.createElement('button');
+    el.type = 'button'; el.role = 'tab'; el.setAttribute('aria-selected', String(k === selectChapter)); el.disabled = !isOpen(k * PER_ROOM);
+    const done = [...Array(PER_ROOM).keys()].filter(j => isCleared(k * PER_ROOM + j)).length;
+    el.innerHTML = `<b>${k + 1}</b><span></span><small>${el.disabled ? '잠김' : `${done}/${PER_ROOM}`}</small>`;
+    el.querySelector('span').textContent = r.name;
+    el.addEventListener('click', () => { selectChapter = k; renderSelect(); });
+    return el;
+  }));
+  const strip = $('#chapters'), sel = strip.children[selectChapter];
+  if (sel) strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+  const rr = ROOMS[selectChapter];
+  $('#villageGim').textContent = rr.mix ? `이 방 · ${rr.mix}` : `이 방에서 만나는 짐 · ${GIMMICKS[rr.gim].name}`;
+  $('#stages').replaceChildren(...LEVELS.slice(selectChapter * PER_ROOM, (selectChapter + 1) * PER_ROOM).map((l, j) => {
+    const i = selectChapter * PER_ROOM + j, rec = save.levels[i], el = document.createElement('button');
+    el.type = 'button'; el.className = 'stage' + (rec ? ' cleared' : '') + (i === next && !rec ? ' next' : ''); el.disabled = !isOpen(i);
+    el.innerHTML = `<span class="num">${i + 1}</span><span class="nm"></span><span class="flowers">${el.disabled ? '' : flowerIcons(rec ? rec.flowers : 0)}</span>`;
+    el.querySelector('.nm').textContent = el.disabled ? '잠김' : l.coach ? '배워 보기' : `${l.size.join('×')} 상자`;
+    el.setAttribute('aria-label', `${i + 1}. ${l.name}${el.disabled ? ' (잠김)' : rec ? `, 꽃 ${rec.flowers}송이` : ''}`);
+    el.addEventListener('click', () => startLevel(i));
+    return el;
+  }));
+  $('#selectNote').textContent = progressText();
+}
+$('#playBtn').addEventListener('click', () => { Sound.ensure(); startLevel(firstUnfinished()); });
+$('#stagesBtn').addEventListener('click', () => { Sound.ensure(); openSelect(); });
+$('#toSelect').addEventListener('click', openSelect);
+$('#closeSelect').addEventListener('click', () => { if (selectFrom === 'play') showScreen('play'); else showTitle(); });
+function showClear() {
+  const fl = flowersFor(undos), prev = save.levels[levelIndex];
+  save.levels[levelIndex] = { undos: prev ? Math.min(prev.undos, undos) : undos, flowers: Math.max(prev ? prev.flowers : 0, fl) };
+  writeSave();
+  const last = levelIndex === LEVELS.length - 1, roomEnd = levelIndex % PER_ROOM === PER_ROOM - 1;
+  $('#clearTitle').textContent = last ? '이사 준비 끝!' : roomEnd ? `${ROOMS[chapterOf(levelIndex)].name} 끝!` : '상자를 꽉 채웠어요';
+  $('#bigFlowers').innerHTML = flowerIcons(fl, 3, 'f-on-anim');
+  const stats = [`되돌리기 ${undos}번`];
+  if (fl < 3) stats.push('되돌리기 없이 채우면 꽃 3송이');
+  $('#clearStats').replaceChildren(...stats.map(t => Object.assign(document.createElement('span'), { textContent: t })));
+  const nextR = !last && roomEnd ? ROOMS[chapterOf(levelIndex) + 1] : null;
+  $('#clearNext').textContent = nextR ? (nextR.mix ? `다음 방 ${nextR.name}: ${nextR.mix}` : `다음 방 ${nextR.name}에서 새 짐 '${GIMMICKS[nextR.gim].name}'을 만나요`) : '';
+  $('#clearNext').hidden = !nextR;
+  $('#nextBtn').textContent = last ? '스테이지 목록' : roomEnd ? '다음 방으로' : '다음 상자';
+  hideTip(); showScreen('clear');
+}
+$('#againBtn').addEventListener('click', () => startLevel(levelIndex, true));
+$('#nextBtn').addEventListener('click', () => { if (levelIndex === LEVELS.length - 1) openSelect(); else startLevel(levelIndex + 1); });
+
+// the title screen packs a box by itself
+let demoT = 0;
+function showTitle() {
+  tipOpen = false;
+  mode = 'title';
+  buildLevel(5);
+  $('#playBtn').textContent = totals().done ? '이어하기' : '시작하기';
+  $('#progressNote').textContent = progressText();
+  showScreen('title');
+}
+function demoStep() {
+  const k = L.order.find(i => !placedOrder.includes(i));
+  if (k === undefined) { if (!won) { won = true; closeT = 0; } else if (closeT > 3) buildLevel(5); return; }
+  const cells = L.pieces[k].cells;
+  for (const c of cells) box.filled.set(keyC(c), k);
+  placedOrder.push(k); addPieceMesh(k, cells);
+}
+
+// ---------- animation ----------
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
+  const target = mode === 'title' && !reduced ? viewRot + dt * 0.25 : viewQ * Math.PI / 2;
+  if (!drag || drag.place) viewRot += (target - viewRot) * Math.min(1, dt * (mode === 'title' ? 60 : 8));
+  pivot.rotation.y = viewRot;
+  if (mode === 'title') { demoT += dt; if (demoT > 0.9) { demoT = 0; demoStep(); } }
+  for (const d of drops) { d.t += dt; const k = Math.min(1, d.t / 0.35); d.g.position.y = 2.2 * (1 - k * k) + (k >= 1 ? 0 : 0); if (k >= 1 && !d.done) { d.done = true; d.g.position.y = 0; } }
+  drops = drops.filter(d => !d.done);
+  for (const m of Object.values(GHOST_MAT)) m.opacity = 0.4 + Math.sin(t * 5) * 0.12;
+  if (targetGlow) targetGlow.children.forEach(c => { c.material.opacity = 0.25 + Math.sin(t * 6) * 0.15; });
+  // flaps: open while packing, fold shut when the box is full
+  if (closeT >= 0) closeT += dt;
+  const shut = won ? Math.min(1, Math.max(0, (closeT - 0.4) / 0.6)) : 0;
+  flaps.forEach(({ hinge, axis, sgn }, n) => {
+    const open = sgn * 2.55, closed = 0, k = n < 2 ? Math.min(1, shut * 1.6) : Math.max(0, shut * 1.6 - 0.6);
+    const ang = open + (closed - open) * k;
+    if (axis === 'x') hinge.rotation.x = ang; else hinge.rotation.z = -ang;
+    hinge.position.y = box.H + (k > 0.98 ? (n < 2 ? 0.0 : 0.04) : 0);
+  });
+  if (tape) tape.visible = won && closeT > 1.1, tape.position.y = box.H + 0.08;
+  if (capy) {
+    const happy = won && closeT > 1.2;
+    capy.position.y = -0.04 + (happy && !reduced ? Math.abs(Math.sin(t * 7)) * 0.2 : Math.sin(t * 1.5) * 0.006);
+    for (const e of capy.userData.eyes) e.scale.y = 0.036 * (happy ? 0.2 : 1);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// ---------- boot ----------
+renderSound();
+window.claude?.hot?.snapshot?.(() => ({ mode, levelIndex }));
+function boot(data) {
+  if (data && data.mode === 'play' && Number.isInteger(data.levelIndex)) startLevel(data.levelIndex, true);
+  else showTitle();
+  requestAnimationFrame(tick);
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
