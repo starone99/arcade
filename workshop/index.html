@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="나무 부품을 돌려 맞춰 설계도대로 끼우는 3D 조립 퍼즐">
+<style>[hidden]{display:none!important}</style>
+<title>작은 공방</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: full-screen workbench with the model's blueprint in the middle; HUD on top, a bottom dock with the parts tray
+   and turn / fit buttons; side buttons for view, undo, hint. One deliberate light look: a quiet wood workshop. */
+:root {
+  --sky-top: #e9e1d3;
+  --sky-bot: #f6f1e8;
+  --ink: #2f3a36;
+  --ink-soft: #6e7a74;
+  --panel: #fffdf8;
+  --panel-line: #e3dccd;
+  --kraft: #b98a52;
+  --kraft-deep: #8f6537;
+  --go: #3f9a7a;
+  --go-deep: #2f7a5f;
+  --blush: #ff9fb2;
+  --locked: #d8d0c4;
+  --warn: #e3584b;
+  --f-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+html { box-sizing: border-box; height: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+body { height: 100%; margin: 0; overflow: hidden; background: linear-gradient(180deg, var(--sky-top), var(--sky-bot)); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--kraft); outline-offset: 2px; }
+#app { position: relative; height: 100%; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+.round { width: 44px; height: 44px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--panel); box-shadow: 0 3px 0 var(--panel-line), 0 8px 18px rgba(58, 54, 49, .12); }
+.round svg { width: 21px; height: 21px; stroke: var(--ink); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.round:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--panel-line); }
+.round:disabled { opacity: .45; cursor: default; }
+.coach { animation: beat 1s ease-in-out infinite; box-shadow: 0 0 0 3px var(--kraft), 0 8px 18px rgba(58, 54, 49, .2) !important; }
+@keyframes beat { 50% { transform: scale(1.07); } }
+
+.hud { position: absolute; left: 0; right: 0; top: 0; display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 10px; padding: max(12px, env(safe-area-inset-top, 0px)) 16px 0; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.hud-right { display: flex; gap: 8px; }
+.stage-name { justify-self: center; text-align: center; min-width: 0; }
+.stage-name b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 22px; line-height: 1.2; text-wrap: balance; }
+.stage-name > span { display: inline-block; margin-top: 4px; padding: 2px 12px; border-radius: 999px; background: rgba(255, 253, 248, .8); font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.goals { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; margin-top: 6px; }
+.goal { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px 2px 8px; border-radius: 999px; background: rgba(255, 253, 248, .9); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.goal.done { background: var(--go); color: #fff; }
+
+.side { position: absolute; display: grid; gap: 8px; bottom: calc(var(--dock-h, 170px) + 12px); }
+.side.left { left: 16px; }
+.side.right { right: 16px; }
+.side .label { display: block; font-size: 11px; color: var(--ink-soft); text-align: center; margin-top: 2px; }
+
+.dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px max(12px, env(safe-area-inset-bottom, 0px)); background: rgba(255, 253, 248, .92); border-top: 1px solid var(--panel-line); box-shadow: 0 -10px 30px rgba(58, 54, 49, .08); }
+.tray { display: flex; gap: 8px; overflow-x: auto; padding: 4px 4px 8px; scroll-snap-type: x proximity; }
+.item { flex: none; width: 72px; height: 72px; border-radius: 16px; border: 2px solid var(--panel-line); background: #fff; display: block; padding: 5px; scroll-snap-align: center; position: relative; }
+.item svg { display: block; width: 100%; height: 100%; }
+.item[aria-pressed="true"] { border-color: var(--kraft); background: #fff6ea; box-shadow: 0 0 0 3px rgba(201, 154, 98, .3); }
+.item .tag { position: absolute; top: -6px; right: -6px; font-size: 10px; padding: 0 6px; border-radius: 999px; background: var(--ink); color: #fff; font-family: var(--f-display); }
+.actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.pill { height: 44px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--panel-line); background: #fff; display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-display); font-size: 15px; }
+.pill svg { width: 18px; height: 18px; stroke: var(--ink); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pill:disabled { opacity: .45; cursor: default; }
+.pill.place { background: var(--go); border-color: var(--go); color: #fff; padding: 0 22px; box-shadow: 0 4px 0 var(--go-deep); }
+.pill.place svg { stroke: #fff; }
+.pill.place:disabled { background: var(--locked); border-color: var(--locked); box-shadow: none; }
+.dock-note { text-align: center; font-size: 13px; color: var(--ink-soft); margin: 0 0 6px; min-height: 1.5em; }
+.dock-note.warn { color: #5b4fd6; }
+
+.tip { position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top, 0px)) + 104px); width: min(420px, calc(100% - 32px)); display: grid; grid-template-columns: 40px 1fr; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 18px; background: var(--panel); border: 0; box-shadow: 0 8px 22px rgba(58, 54, 49, .14); text-align: left; font-size: 14px; }
+.tip svg { width: 40px; height: 30px; }
+.toast { position: absolute; left: 50%; bottom: calc(var(--dock-h, 170px) + 16px); transform: translateX(-50%); max-width: calc(100% - 140px); padding: 8px 16px; border-radius: 999px; background: var(--ink); color: var(--panel); font-size: 14px; text-align: center; box-shadow: 0 8px 20px rgba(58, 54, 49, .25); animation: pop .25s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.overlay { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: end center; overflow: auto; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); }
+.overlay.center { place-items: center; background: rgba(243, 230, 212, .6); }
+.card { width: min(460px, 100%); min-width: 0; background: var(--panel); border-radius: 26px; padding: 22px 22px 20px; box-shadow: 0 6px 0 var(--panel-line), 0 20px 50px rgba(58, 54, 49, .18); }
+.title-card { text-align: center; }
+.title-card h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(32px, 9vw, 44px); line-height: 1.1; text-wrap: balance; }
+.title-card h1 em { font-style: normal; color: var(--kraft-deep); }
+.title-card p { margin: 8px auto 18px; color: var(--ink-soft); max-width: 30em; text-wrap: balance; }
+.btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.primary { border: 0; border-radius: 18px; padding: 12px 22px; min-width: 140px; background: var(--kraft); color: #fff; font-family: var(--f-display); font-size: 19px; box-shadow: 0 4px 0 var(--kraft-deep); }
+.primary:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--kraft-deep); }
+.secondary { border: 2px solid var(--panel-line); border-radius: 18px; padding: 10px 20px; min-width: 120px; background: var(--panel); font-family: var(--f-display); font-size: 18px; }
+.progress-note { margin-top: 14px; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.select-card { width: min(560px, 100%); }
+.select-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.select-head h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.chapters { position: relative; display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 10px; margin: 0 -4px 6px; }
+.chapters button { flex: none; display: grid; grid-template-columns: auto auto; column-gap: 6px; align-items: baseline; text-align: left; border: 2px solid var(--panel-line); border-radius: 14px; background: #fff; padding: 6px 12px 5px; }
+.chapters button b { font-family: var(--f-display); font-weight: 400; font-size: 18px; color: var(--kraft-deep); grid-row: span 2; }
+.chapters button span { font-size: 13px; white-space: nowrap; }
+.chapters button small { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.chapters button[aria-selected="true"] { border-color: var(--kraft); background: #fff6ea; }
+.chapters button:disabled { cursor: not-allowed; opacity: .5; }
+.village-gim { margin: -2px 0 10px; font-size: 13px; color: var(--ink-soft); }
+.stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.stage { border: 2px solid var(--panel-line); border-radius: 18px; background: #fff; padding: 10px 6px 9px; text-align: center; display: grid; gap: 2px; justify-items: center; }
+.stage .num { font-family: var(--f-display); font-size: 26px; line-height: 1; color: var(--kraft-deep); }
+.stage .nm { font-size: 12px; line-height: 1.3; min-height: 1.3em; }
+.stage.cleared { border-color: var(--go); }
+.stage.next { border-color: var(--kraft); box-shadow: 0 0 0 3px rgba(201, 154, 98, .3); }
+.stage:disabled { cursor: not-allowed; background: #f6f2ec; }
+.stage:disabled .num, .stage:disabled .nm { color: var(--locked); }
+.flowers { display: flex; gap: 2px; height: 16px; align-items: center; }
+.flowers svg { width: 15px; height: 15px; }
+.f-on { fill: var(--blush); } .f-off { fill: var(--locked); }
+.intro-card { text-align: center; width: min(380px, 100%); }
+.intro-tag { display: inline-block; padding: 2px 12px; border-radius: 999px; background: var(--kraft); color: #fff; font-family: var(--f-display); font-size: 14px; }
+.gim-art { display: block; width: 112px; height: 112px; margin: 12px auto 6px; }
+.intro-card h2 { margin: 0 0 6px; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.intro-card p { margin: 0 auto 18px; color: var(--ink-soft); max-width: 26em; text-wrap: pretty; }
+.dex-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); max-height: min(62vh, 560px); overflow: auto; padding: 2px; }
+.dex-item { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; background: #fff; border: 2px solid var(--panel-line); border-radius: 16px; padding: 8px 10px; }
+.dex-item svg { width: 52px; height: 52px; }
+.dex-item b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 16px; }
+.dex-item small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; color: var(--ink-soft); line-height: 1.4; }
+.dex-item.locked { cursor: default; background: #f6f2ec; }
+#clear { background: linear-gradient(180deg, transparent 40%, rgba(251, 244, 234, .7)); }
+.clear-card { text-align: center; animation: rise .45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.clear-card h2 { margin: 0 0 4px; font-family: var(--f-display); font-weight: 400; font-size: 28px; text-wrap: balance; }
+.big-flowers { display: flex; justify-content: center; gap: 8px; margin: 10px 0 6px; }
+.big-flowers svg { width: 44px; height: 44px; }
+.big-flowers svg.f-on-anim { animation: bloom .5s ease-out both; }
+@keyframes bloom { from { transform: scale(.2) rotate(-40deg); } to { transform: none; } }
+.stats { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 16px; }
+.stats span { padding: 4px 12px; border-radius: 999px; background: #f3ede3; font-size: 14px; font-variant-numeric: tabular-nums; }
+.clear-next { margin: -6px 0 14px; font-size: 14px; color: var(--kraft-deep); text-wrap: balance; }
+@media (max-width: 480px) {
+  .hud { padding-inline: 12px; gap: 6px; }
+  .hud-right { flex-direction: column; gap: 6px; }
+  .round { width: 40px; height: 40px; }
+  .stage-name b { font-size: 18px; }
+  .goal { font-size: 12px; }
+  .side.left { left: 10px; } .side.right { right: 10px; }
+  .item { width: 64px; height: 64px; }
+  .pill { padding: 0 11px; font-size: 14px; }
+  .pill.place { padding: 0 16px; }
+  .card { padding: 18px 16px 16px; border-radius: 22px; }
+  .stages { gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="flower" viewBox="0 0 20 20">
+    <circle cx="10" cy="4.6" r="3.9"/><circle cx="15.1" cy="8.3" r="3.9"/><circle cx="13.2" cy="14.3" r="3.9"/>
+    <circle cx="6.8" cy="14.3" r="3.9"/><circle cx="4.9" cy="8.3" r="3.9"/><circle cx="10" cy="10" r="3" fill="#fff6d8"/>
+  </symbol>
+  <symbol id="mallet" viewBox="0 0 40 30">
+    <rect x="4" y="4" width="18" height="11" rx="3" fill="#b98a52"/><rect x="3" y="4" width="4" height="11" rx="1.5" fill="#8f6537"/><rect x="19" y="4" width="4" height="11" rx="1.5" fill="#8f6537"/>
+    <rect x="12" y="13" width="4" height="15" rx="2" fill="#d9b585"/><path d="M28 8 l6 -3 M29 14 h7 M28 20 l6 3" stroke="#3f9a7a" stroke-width="2.4" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<div id="app">
+  <canvas id="scene" aria-label="작업대 위 설계도. 부품을 골라 방향을 맞추고 설계도 칸을 눌러 끼워요."></canvas>
+
+  <header class="hud" id="hud" hidden>
+    <button type="button" class="round" id="toSelect" aria-label="스테이지 목록"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg></button>
+    <div class="stage-name"><b id="stageTitle"></b><span id="moveLabel"></span><div class="goals" id="goals" aria-live="polite"></div></div>
+    <div class="hud-right">
+      <button type="button" class="round" id="helpBtn" aria-label="공방 도감"><svg viewBox="0 0 24 24"><path d="M9.2 9a3 3 0 1 1 4.3 2.7c-.9.5-1.5 1.2-1.5 2.3v.5"/><path d="M12 18h.01"/></svg></button>
+      <button type="button" class="round" id="soundBtn" aria-label="소리 끄기"><svg viewBox="0 0 24 24" id="soundIcon"></svg></button>
+    </div>
+  </header>
+
+  <button type="button" class="tip" id="tip" hidden><svg viewBox="0 0 40 30" aria-hidden="true"><use href="#mallet"/></svg><span id="tipText"></span></button>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <div class="side left" id="sideL" hidden>
+    <div><button type="button" class="round" id="viewL" aria-label="작품을 왼쪽으로 돌려 보기"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></button><span class="label">보기</span></div>
+    <div><button type="button" class="round" id="viewR" aria-label="작품을 오른쪽으로 돌려 보기"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></svg></button><span class="label">보기</span></div>
+  </div>
+  <div class="side right" id="sideR" hidden>
+    <div><button type="button" class="round" id="undoBtn" aria-label="한 번 되돌리기"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button><span class="label">되돌리기</span></div>
+    <div><button type="button" class="round" id="hintBtn" aria-label="힌트"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9V16h7v-2.1A6 6 0 0 0 12 3z"/></svg></button><span class="label">힌트</span></div>
+    <div><button type="button" class="round" id="resetBtn" aria-label="처음부터"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button><span class="label">처음부터</span></div>
+  </div>
+
+  <section class="dock" id="dock" hidden>
+    <p class="dock-note" id="dockNote"></p>
+    <div class="tray" id="tray" aria-label="부품 고르기"></div>
+    <div class="actions">
+      <button type="button" class="pill" data-turn="yaw"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></svg>돌리기</button>
+      <button type="button" class="pill" data-turn="pitch"><svg viewBox="0 0 24 24"><path d="M12 4v16M7 9l5-5 5 5"/></svg>세우기</button>
+      <button type="button" class="pill" data-turn="roll"><svg viewBox="0 0 24 24"><path d="M4 12h16M9 7l-5 5 5 5"/></svg>눕히기</button>
+      <button type="button" class="pill place" id="placeBtn"><svg viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>끼우기</button>
+    </div>
+  </section>
+
+  <section class="overlay" id="title">
+    <div class="card title-card">
+      <h1>작은 <em>공방</em></h1>
+      <p>나무 부품을 돌려 맞춰 설계도대로 끼우면 작은 모형이 완성돼요. 집, 등대, 풍차까지 100가지 작품이 기다려요.</p>
+      <div class="btn-row">
+        <button type="button" class="primary" id="playBtn">시작하기</button>
+        <button type="button" class="secondary" id="stagesBtn">스테이지</button>
+      </div>
+      <div class="progress-note" id="progressNote"></div>
+    </div>
+  </section>
+
+  <section class="overlay center" id="select" hidden>
+    <div class="card select-card" role="dialog" aria-labelledby="selectTitle">
+      <div class="select-head">
+        <h2 id="selectTitle">작업대 고르기</h2>
+        <button type="button" class="round" id="closeSelect" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="chapters" id="chapters" role="tablist" aria-label="작업대"></div>
+      <p class="village-gim" id="villageGim"></p>
+      <div class="stages" id="stages"></div>
+      <div class="progress-note" id="selectNote"></div>
+    </div>
+  </section>
+
+  <section class="overlay center" id="intro" hidden>
+    <div class="card intro-card" role="dialog" aria-labelledby="introTitle">
+      <span class="intro-tag" id="introTag"></span>
+      <svg class="gim-art" id="introArt" viewBox="0 0 64 64" aria-hidden="true"></svg>
+      <h2 id="introTitle"></h2>
+      <p id="introText"></p>
+      <button type="button" class="primary" id="introGo">해볼게요</button>
+    </div>
+  </section>
+
+  <section class="overlay center" id="dex" hidden>
+    <div class="card select-card" role="dialog" aria-labelledby="dexTitle">
+      <div class="select-head">
+        <h2 id="dexTitle">공방 도감</h2>
+        <button type="button" class="round" id="closeDex" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="dex-list" id="dexList"></div>
+    </div>
+  </section>
+
+  <section class="overlay" id="clear" hidden>
+    <div class="card clear-card" role="dialog" aria-labelledby="clearTitle">
+      <h2 id="clearTitle"></h2>
+      <div class="big-flowers" id="bigFlowers"></div>
+      <div class="stats" id="clearStats"></div>
+      <p class="clear-next" id="clearNext" hidden></p>
+      <div class="btn-row">
+        <button type="button" class="secondary" id="againBtn">다시 하기</button>
+        <button type="button" class="primary" id="nextBtn">다음 작품</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+// LOGIC START
+// Cubes are [x, y, z] (y up). A part is a list of cubes with a colour each; shapes are normalised (min corner at 0).
+const keyC = ([x, y, z]) => `${x},${y},${z}`;
+const N6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+// a shape here is [[x, y, z, colour], ...]
+function normalize(cs) {
+  const mx = Math.min(...cs.map(c => c[0])), my = Math.min(...cs.map(c => c[1])), mz = Math.min(...cs.map(c => c[2]));
+  return cs.map(([x, y, z, c]) => [x - mx, y - my, z - mz, c]).sort((a, b) => a[1] - b[1] || a[2] - b[2] || a[0] - b[0]);
+}
+const shapeKey = (cs, colour) => normalize(cs).map(c => `${c[0]},${c[1]},${c[2]}${colour ? ':' + c[3] : ''}`).join(';');
+const TURNS = {
+  yaw: cs => normalize(cs.map(([x, y, z, c]) => [-z, y, x, c])),     // turn around the vertical axis
+  pitch: cs => normalize(cs.map(([x, y, z, c]) => [x, -z, y, c])),   // stand it up
+  roll: cs => normalize(cs.map(([x, y, z, c]) => [-y, x, z, c])),    // lay it on its side
+};
+// shortest button sequence that turns `from` into `to` (colours must line up when `colour` is set)
+function turnsBetween(from, to, colour) {
+  const goal = shapeKey(to, colour), start = normalize(from);
+  const prev = new Map([[shapeKey(start, colour), null]]), q = [start];
+  for (let i = 0; i < q.length; i++) {
+    const k = shapeKey(q[i], colour);
+    if (k === goal) { const seq = []; for (let kk = k; prev.get(kk); kk = prev.get(kk)[0]) seq.unshift(prev.get(kk)[1]); return seq; }
+    for (const [name, f] of Object.entries(TURNS)) { const n = f(q[i]), nk = shapeKey(n, colour); if (!prev.has(nk)) { prev.set(nk, [k, name]); q.push(n); } }
+  }
+  return null;
+}
+
+// rules: support = must touch the floor or a placed part; slide = there must be a straight way in from outside
+function canSlideIn(cells, filled, bounds) {
+  const own = new Set(cells.map(keyC));
+  for (const [dx, dy, dz] of N6) {
+    if (dy < 0) continue;                        // nothing comes up through the table
+    let clear = true;
+    for (const [x, y, z] of cells) {
+      for (let t = 1; t < 16 && clear; t++) {
+        const p = [x + dx * t, y + dy * t, z + dz * t];
+        if (p[0] < bounds[0] - 1 || p[1] > bounds[1] + 1 || p[2] < bounds[2] - 1 || p[0] > bounds[3] + 1 || p[2] > bounds[4] + 1) break;
+        const k = keyC(p);
+        if (!own.has(k) && filled.has(k)) clear = false;
+      }
+      if (!clear) break;
+    }
+    if (clear) return [dx, dy, dz];
+  }
+  return null;
+}
+function touchesSupport(cells, filled) {
+  const own = new Set(cells.map(keyC));
+  return cells.some(([x, y, z]) => y === 0 || N6.some(([dx, dy, dz]) => { const k = keyC([x + dx, y + dy, z + dz]); return !own.has(k) && filled.has(k); }));
+}
+// every way to put `shape` (current orientation) so it covers `at` and matches empty blueprint cells exactly
+function placementsCovering(shape, at, blueprint, filled, colour) {
+  const out = [];
+  for (const [sx, sy, sz] of shape) {
+    const ox = at[0] - sx, oy = at[1] - sy, oz = at[2] - sz;
+    const cells = shape.map(([x, y, z, c]) => [x + ox, y + oy, z + oz, c]);
+    const ok = cells.every(c => { const k = keyC(c), want = blueprint.get(k); return want !== undefined && !filled.has(k) && (!colour || want === c[3]); });
+    if (ok && !out.some(o => o.every((c, i) => keyC(c) === keyC(cells[i])))) out.push(cells);
+  }
+  return out;
+}
+// can this part go in now, under the stage's rules? returns null if fine, else the reason
+function ruleBlock(cells, filled, rules, bounds) {
+  if (rules.support && !touchesSupport(cells, filled)) return 'float';
+  if (rules.slide && !canSlideIn(cells, filled, bounds)) return 'stuck';
+  return null;
+}
+// LOGIC END
+
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---------- stages ----------
+const BENCHES = [
+  { name: '첫 공방',     gim: 'build',   sky: ['#e9e1d3', '#f6f1e8'] },
+  { name: '돌려 끼우기', gim: 'yaw',     sky: ['#e3e7dc', '#f5f2ea'] },
+  { name: '뒤집어 끼우기', gim: 'any',   sky: ['#e6e0ea', '#f7f2ee'] },
+  { name: '받쳐 붙이기', gim: 'support', sky: ['#efe2d2', '#f8f1e7'] },
+  { name: '원목 키트',   gim: 'plain',   sky: ['#ece2cf', '#f8f2e6'] },
+  { name: '끼우는 순서', gim: 'slide',   sky: ['#dfe7e6', '#f4f3ee'] },
+  { name: '큰 작품',     gim: 'mix', mix: '부품이 많아졌어요. 아래쪽부터 차근차근 끼워요.', sky: ['#e8e4d6', '#f7f3ea'] },
+  { name: '원목 대작',   gim: 'mix', mix: '색 힌트 없이 큰 작품을 만들어요.',               sky: ['#ebe0cc', '#f8f1e4'] },
+  { name: '정밀 조립',   gim: 'mix', mix: '작은 부품이 많아요. 닮은 부품을 잘 구별해요.',     sky: ['#e2e4ea', '#f5f3f0'] },
+  { name: '마스터피스',  gim: 'mix', mix: '원목으로 만드는 가장 큰 작품들이에요.',           sky: ['#f1e3cc', '#faf3e6'] },
+];
+const PER = 10;
+const STAGE_DATA = [{"name":"파란 지붕 집","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[1,0,0,"s"],[0,0,0,"s"],[2,0,0,"s"],[0,1,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[0,0,2,"s"],[0,1,1,"s"],[1,1,0,"s"],[0,1,2,"s"],[1,1,1,"s"],[1,0,2,"n"],[2,0,1,"s"],[2,0,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[2,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[2,0,1,"s"],[0,0,2,"s"],[1,0,2,"n"],[2,0,2,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[0,1,2,"s"]]},{"cells":[[2,1,1,"s"],[2,1,0,"s"],[2,2,0,"b"],[2,1,2,"s"],[1,2,0,"b"],[1,1,2,"s"],[2,2,2,"b"],[1,2,1,"b"],[0,2,1,"b"],[1,2,2,"b"],[2,2,1,"b"],[1,3,1,"b"],[0,3,1,"b"],[0,2,0,"b"],[0,2,2,"b"],[2,3,1,"b"]],"start":[[2,0,0,"s"],[2,0,1,"s"],[1,0,2,"s"],[2,0,2,"s"],[0,1,0,"b"],[1,1,0,"b"],[2,1,0,"b"],[0,1,1,"b"],[1,1,1,"b"],[2,1,1,"b"],[0,1,2,"b"],[1,1,2,"b"],[2,1,2,"b"],[0,2,1,"b"],[1,2,1,"b"],[2,2,1,"b"]]}],"order":[0,1]},{"name":"버섯","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[1,0,1,"s"],[1,1,1,"s"],[1,2,1,"l"],[1,2,2,"s"],[1,3,1,"l"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"l"],[0,2,1,"s"],[0,3,0,"l"]]},{"cells":[[0,2,0,"s"],[1,2,0,"l"],[2,2,0,"l"]],"start":[[0,0,0,"s"],[1,0,0,"l"],[2,0,0,"l"]]},{"cells":[[0,2,1,"l"],[0,2,2,"l"]],"start":[[0,0,0,"l"],[0,0,1,"l"]]},{"cells":[[2,2,2,"l"],[2,2,1,"s"]],"start":[[0,0,0,"s"],[0,0,1,"l"]]}],"order":[0,1,2,3]},{"name":"돛단배","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[3,0,1,"n"],[3,1,1,"n"],[4,1,1,"n"],[4,1,0,"n"],[3,1,0,"n"],[3,0,0,"n"],[2,0,1,"n"]],"start":[[1,0,0,"n"],[0,0,1,"n"],[1,0,1,"n"],[1,1,0,"n"],[2,1,0,"n"],[1,1,1,"n"],[2,1,1,"n"]]},{"cells":[[2,0,0,"n"],[1,0,0,"n"],[2,1,0,"n"],[2,1,1,"n"],[1,0,1,"n"],[2,2,0,"k"],[2,3,0,"k"],[1,1,0,"n"],[2,4,0,"k"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[0,0,1,"n"],[0,1,0,"n"],[1,1,0,"n"],[1,1,1,"n"],[1,2,0,"k"],[1,3,0,"k"],[1,4,0,"k"]]},{"cells":[[0,1,0,"n"],[0,1,1,"n"],[1,1,1,"n"]],"start":[[0,0,0,"n"],[0,0,1,"n"],[1,0,1,"n"]]},{"cells":[[1,3,1,"s"],[0,3,1,"s"],[1,4,1,"s"],[0,4,1,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"]]}],"order":[0,1,2,3]},{"name":"로켓","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[2,0,2,"k"],[1,0,2,"k"],[1,0,3,"b"],[1,1,3,"b"],[2,1,2,"s"],[1,1,2,"s"],[1,2,2,"s"],[2,1,1,"s"],[2,1,0,"b"]],"start":[[0,0,2,"k"],[1,0,2,"k"],[0,0,3,"b"],[1,1,0,"b"],[1,1,1,"s"],[0,1,2,"s"],[1,1,2,"s"],[0,1,3,"b"],[0,2,2,"s"]]},{"cells":[[0,0,1,"b"],[1,0,1,"k"],[2,0,1,"k"],[0,1,1,"b"],[2,0,0,"b"],[1,1,1,"s"],[1,2,1,"s"],[2,2,1,"s"],[2,3,1,"c"],[1,3,1,"c"],[1,3,2,"c"]],"start":[[2,0,0,"b"],[0,0,1,"b"],[1,0,1,"k"],[2,0,1,"k"],[0,1,1,"b"],[1,1,1,"s"],[1,2,1,"s"],[2,2,1,"s"],[1,3,1,"c"],[2,3,1,"c"],[1,3,2,"c"]]},{"cells":[[3,0,2,"b"],[3,1,2,"b"]],"start":[[0,0,0,"b"],[0,1,0,"b"]]},{"cells":[[2,2,2,"s"],[2,3,2,"c"],[2,4,2,"s"],[2,4,1,"s"],[1,4,1,"s"],[1,5,1,"r"],[1,4,2,"s"],[2,5,2,"r"]],"start":[[1,0,1,"s"],[1,1,1,"c"],[0,2,0,"s"],[1,2,0,"s"],[0,2,1,"s"],[1,2,1,"s"],[0,3,0,"r"],[1,3,1,"r"]]}],"order":[0,1,2,3]},{"name":"성탑","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[0,0,2,"m"],[0,1,2,"m"],[0,1,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[1,1,2,"m"],[1,2,0,"m"],[1,2,2,"m"]],"start":[[0,0,2,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"],[1,1,2,"m"],[1,2,0,"m"],[1,2,2,"m"]]},{"cells":[[1,0,2,"n"],[2,0,2,"m"],[1,0,1,"m"],[1,1,1,"m"],[0,0,1,"m"],[1,2,1,"m"],[2,1,1,"m"],[0,2,1,"m"],[0,2,0,"m"],[2,1,2,"m"],[0,0,0,"m"],[2,2,2,"m"],[2,3,2,"m"],[0,3,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[1,0,2,"n"],[2,0,2,"m"],[1,1,1,"m"],[2,1,1,"m"],[2,1,2,"m"],[0,2,0,"m"],[0,2,1,"m"],[1,2,1,"m"],[2,2,2,"m"],[0,3,0,"m"],[2,3,2,"m"]]},{"cells":[[2,0,0,"m"],[2,1,0,"m"],[2,0,1,"m"],[2,2,0,"m"],[2,2,1,"m"],[1,0,0,"m"],[2,3,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[1,0,1,"m"],[1,1,0,"m"],[1,2,0,"m"],[1,2,1,"m"],[1,3,0,"m"]]},{"cells":[[0,2,2,"m"],[0,3,2,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"]]},{"cells":[[1,3,1,"k"],[1,4,1,"k"],[1,4,0,"r"]],"start":[[0,0,1,"k"],[0,1,0,"r"],[0,1,1,"k"]]}],"order":[1,3,0,2,4]},{"name":"돌다리","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[0,0,1,"m"],[0,1,1,"m"],[1,1,1,"m"],[1,1,0,"m"],[1,2,0,"w"],[0,2,1,"w"]],"start":[[0,0,1,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[1,2,0,"w"],[0,2,1,"w"]]},{"cells":[[4,0,0,"m"],[4,0,1,"m"],[4,1,1,"m"],[3,1,1,"m"],[4,2,1,"w"],[4,1,0,"m"],[4,2,0,"w"],[3,1,0,"m"]],"start":[[1,0,0,"m"],[1,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[1,2,0,"w"],[1,2,1,"w"]]},{"cells":[[0,0,0,"m"],[0,1,0,"m"],[0,2,0,"w"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[0,2,0,"w"]]},{"cells":[[2,2,1,"w"],[3,2,1,"w"],[2,2,0,"w"],[3,2,0,"w"],[1,2,1,"w"]],"start":[[1,0,0,"w"],[2,0,0,"w"],[0,0,1,"w"],[1,0,1,"w"],[2,0,1,"w"]]}],"order":[0,2,1,3]},{"name":"초록 자동차","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[0,0,0,"k"],[0,1,0,"g"],[1,1,0,"g"],[1,1,1,"g"],[0,1,1,"g"],[2,1,0,"g"]],"start":[[0,0,0,"k"],[0,1,0,"g"],[1,1,0,"g"],[2,1,0,"g"],[0,1,1,"g"],[1,1,1,"g"]]},{"cells":[[0,0,2,"k"],[0,1,2,"g"],[1,1,2,"g"],[2,1,2,"g"],[2,2,2,"c"]],"start":[[0,0,0,"k"],[0,1,0,"g"],[1,1,0,"g"],[2,1,0,"g"],[2,2,0,"c"]]},{"cells":[[3,0,0,"k"],[3,1,0,"g"],[3,1,1,"g"],[2,1,1,"g"],[2,2,1,"g"],[3,1,2,"g"],[2,2,0,"c"],[1,2,0,"c"],[3,0,2,"k"]],"start":[[2,0,0,"k"],[2,0,2,"k"],[2,1,0,"g"],[1,1,1,"g"],[2,1,1,"g"],[2,1,2,"g"],[0,2,0,"c"],[1,2,0,"c"],[1,2,1,"g"]]},{"cells":[[1,2,1,"g"],[1,2,2,"c"]],"start":[[0,0,0,"g"],[0,0,1,"c"]]}],"order":[0,2,1,3]},{"name":"작은 식탁","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"W"],[1,2,0,"W"],[1,2,1,"W"],[2,2,0,"W"],[0,2,1,"W"]],"start":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"W"],[1,2,0,"W"],[2,2,0,"W"],[0,2,1,"W"],[1,2,1,"W"]]},{"cells":[[2,0,2,"n"],[2,1,2,"n"],[2,2,2,"W"],[1,2,2,"W"],[2,2,1,"W"],[0,2,2,"W"]],"start":[[2,0,1,"n"],[2,1,1,"n"],[2,2,0,"W"],[0,2,1,"W"],[1,2,1,"W"],[2,2,1,"W"]]},{"cells":[[2,0,0,"n"],[2,1,0,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"]]},{"cells":[[0,0,2,"n"],[0,1,2,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"]]}],"order":[1,0,2,3]},{"name":"생크림 케이크","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[0,0,2,"n"],[0,0,3,"n"],[0,1,3,"s"],[0,1,2,"s"],[1,1,3,"s"],[1,0,3,"n"],[0,0,1,"n"],[0,1,1,"s"],[2,1,3,"s"],[1,1,2,"s"],[1,0,2,"n"]],"start":[[0,0,0,"n"],[0,0,1,"n"],[1,0,1,"n"],[0,0,2,"n"],[1,0,2,"n"],[0,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[0,1,2,"s"],[1,1,2,"s"],[2,1,2,"s"]]},{"cells":[[2,0,1,"n"],[1,0,1,"n"],[1,0,0,"n"],[2,1,1,"s"],[2,1,2,"s"],[2,0,2,"n"],[1,1,1,"s"],[2,2,2,"r"],[2,0,3,"n"],[2,1,0,"s"],[1,2,1,"r"]],"start":[[0,0,0,"n"],[0,0,1,"n"],[1,0,1,"n"],[1,0,2,"n"],[1,0,3,"n"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[1,1,2,"s"],[0,2,1,"r"],[1,2,2,"r"]]},{"cells":[[3,0,1,"n"],[3,0,2,"n"],[3,1,1,"s"],[3,0,3,"n"],[3,1,2,"s"],[3,0,0,"n"],[2,0,0,"n"],[3,1,3,"s"],[3,1,0,"s"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[1,0,1,"n"],[1,0,2,"n"],[1,0,3,"n"],[1,1,0,"s"],[1,1,1,"s"],[1,1,2,"s"],[1,1,3,"s"]]},{"cells":[[0,0,0,"n"],[0,1,0,"s"],[1,1,0,"s"]],"start":[[0,0,0,"n"],[0,1,0,"s"],[1,1,0,"s"]]}],"order":[1,2,3,0]},{"name":"풍차","colour":true,"rules":{"support":false,"slide":false},"turn":"none","parts":[{"cells":[[1,0,1,"m"],[1,0,0,"m"],[1,1,0,"m"],[2,0,1,"m"],[1,1,1,"m"],[2,1,0,"m"],[2,1,1,"m"],[2,0,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"]]},{"cells":[[1,1,2,"s"],[1,2,2,"W"],[1,3,2,"s"],[0,2,2,"s"],[2,2,2,"s"],[2,2,1,"m"],[2,3,1,"r"]],"start":[[1,0,1,"s"],[2,1,0,"m"],[0,1,1,"s"],[1,1,1,"W"],[2,1,1,"s"],[2,2,0,"r"],[1,2,1,"s"]]},{"cells":[[2,2,0,"m"],[2,3,0,"r"],[1,3,0,"r"],[1,2,0,"m"],[1,2,1,"m"],[1,3,1,"r"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[0,1,0,"r"],[1,1,0,"r"],[0,1,1,"r"]]}],"order":[1,0,2]},{"name":"등대","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[0,0,0,"s"],[0,0,1,"s"],[0,1,0,"r"],[0,1,1,"r"],[1,0,0,"s"],[1,0,1,"s"],[0,2,0,"s"],[1,1,1,"r"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[0,1,0,"r"],[1,1,0,"r"],[0,1,1,"r"],[1,2,0,"s"]]},{"cells":[[1,1,0,"r"],[1,2,0,"s"],[1,2,1,"s"],[1,3,0,"r"]],"start":[[1,0,0,"r"],[0,1,0,"s"],[1,1,0,"s"],[1,2,0,"r"]]},{"cells":[[0,2,1,"s"],[0,3,1,"r"],[0,3,0,"r"],[0,4,1,"y"],[0,4,0,"y"]],"start":[[0,0,0,"s"],[0,1,0,"r"],[0,1,1,"r"],[0,2,0,"y"],[0,2,1,"y"]]},{"cells":[[1,3,1,"r"],[1,4,1,"y"],[1,5,1,"r"],[1,4,0,"y"],[1,5,0,"r"],[0,5,1,"r"],[0,5,0,"r"]],"start":[[0,0,1,"r"],[0,1,1,"y"],[1,1,1,"y"],[0,2,0,"r"],[1,2,0,"r"],[0,2,1,"r"],[1,2,1,"r"]]}],"order":[2,0,1,3]},{"name":"눈사람","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[0,0,2,"s"],[1,0,2,"s"],[1,1,2,"s"],[1,0,1,"s"],[1,1,1,"s"],[1,2,1,"s"],[0,1,2,"s"],[0,1,1,"s"],[0,1,0,"s"],[0,2,1,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[0,1,0,"s"],[1,1,0,"s"],[2,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[1,2,0,"s"],[1,2,1,"s"]]},{"cells":[[0,0,1,"s"],[0,0,0,"s"],[1,0,0,"s"],[2,0,0,"s"],[2,1,0,"s"],[1,1,0,"s"],[2,1,1,"s"],[2,0,1,"s"],[1,2,0,"s"],[2,1,2,"s"],[2,0,2,"s"],[2,2,0,"s"],[0,2,0,"s"],[1,3,0,"s"],[2,2,2,"s"]],"start":[[1,0,0,"s"],[2,0,0,"s"],[2,0,1,"s"],[0,0,2,"s"],[1,0,2,"s"],[2,0,2,"s"],[2,1,1,"s"],[0,1,2,"s"],[1,1,2,"s"],[2,1,2,"s"],[2,2,0,"s"],[2,2,1,"s"],[0,2,2,"s"],[2,2,2,"s"],[2,3,1,"s"]]},{"cells":[[2,2,1,"s"],[2,3,1,"s"],[2,3,2,"s"],[1,3,2,"s"],[1,4,2,"k"],[0,4,2,"k"],[1,2,2,"s"],[1,3,3,"o"],[2,3,0,"s"],[0,2,2,"s"],[0,3,3,"k"],[2,4,2,"k"],[1,3,1,"s"],[2,4,1,"k"],[0,3,2,"s"]],"start":[[1,0,1,"s"],[2,0,1,"s"],[0,0,2,"s"],[1,1,0,"o"],[2,1,0,"k"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[0,1,2,"s"],[1,1,2,"s"],[0,1,3,"s"],[0,2,1,"k"],[1,2,1,"k"],[2,2,1,"k"],[0,2,2,"k"]]},{"cells":[[0,3,1,"s"],[0,4,1,"k"],[0,3,0,"s"],[0,4,0,"k"],[1,4,1,"k"],[1,4,0,"k"],[2,4,0,"k"]],"start":[[0,0,2,"s"],[1,0,2,"s"],[0,1,0,"k"],[0,1,1,"k"],[1,1,1,"k"],[0,1,2,"k"],[1,1,2,"k"]]}],"order":[0,2,1,3]},{"name":"로봇","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[1,0,0,"k"],[1,1,0,"l"],[1,1,1,"l"],[2,1,1,"l"],[2,2,1,"l"]],"start":[[1,0,1,"k"],[0,1,0,"l"],[1,1,0,"l"],[1,1,1,"l"],[0,2,0,"l"]]},{"cells":[[3,0,0,"k"],[3,1,0,"l"],[3,1,1,"l"],[2,1,0,"l"],[2,2,0,"l"],[3,2,0,"l"],[4,2,0,"l"]],"start":[[1,0,1,"k"],[1,1,0,"l"],[1,1,1,"l"],[2,1,1,"l"],[0,2,1,"l"],[1,2,1,"l"],[2,2,1,"l"]]},{"cells":[[3,2,1,"l"],[3,3,1,"s"],[3,3,2,"c"],[3,3,0,"s"]],"start":[[1,0,0,"l"],[0,1,0,"s"],[1,1,0,"s"],[2,1,0,"c"]]},{"cells":[[1,2,0,"l"],[1,2,1,"l"],[1,3,1,"s"],[1,3,2,"c"],[1,3,0,"s"],[0,2,0,"l"]],"start":[[2,0,0,"l"],[1,0,1,"l"],[2,0,1,"l"],[0,1,1,"c"],[1,1,1,"s"],[2,1,1,"s"]]},{"cells":[[2,3,1,"s"],[2,3,0,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"]]}],"order":[0,1,2,3,4]},{"name":"빨간 지붕 집","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[1,0,2,"n"],[0,0,2,"p"],[1,1,2,"p"],[1,2,2,"r"],[0,1,2,"p"],[2,0,2,"p"],[1,0,1,"p"],[2,2,2,"r"]],"start":[[1,0,0,"p"],[0,0,1,"p"],[1,0,1,"n"],[1,0,2,"p"],[1,1,1,"p"],[1,1,2,"p"],[1,2,0,"r"],[1,2,1,"r"]]},{"cells":[[0,0,1,"p"],[0,0,0,"p"],[1,0,0,"p"],[2,0,0,"p"],[1,1,0,"p"],[2,1,0,"p"],[1,2,0,"r"]],"start":[[2,0,0,"p"],[0,0,1,"p"],[1,0,1,"p"],[2,0,1,"p"],[0,1,1,"p"],[1,1,1,"p"],[1,2,1,"r"]]},{"cells":[[2,0,1,"p"],[2,1,1,"p"],[2,2,1,"r"],[1,2,1,"r"],[2,3,1,"r"],[1,1,1,"p"],[0,1,1,"p"],[2,2,0,"r"],[1,3,1,"r"],[2,1,2,"p"]],"start":[[1,0,2,"p"],[1,1,0,"p"],[1,1,1,"p"],[0,1,2,"p"],[1,1,2,"p"],[1,2,1,"r"],[1,2,2,"r"],[2,2,2,"r"],[1,3,1,"r"],[1,3,2,"r"]]},{"cells":[[0,1,0,"p"],[0,2,0,"r"],[0,2,1,"r"],[0,3,1,"r"],[0,2,2,"r"]],"start":[[0,0,2,"p"],[0,1,0,"r"],[0,1,1,"r"],[0,1,2,"r"],[0,2,1,"r"]]}],"order":[0,1,2,3]},{"name":"버섯","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[1,0,1,"s"],[1,1,1,"s"],[1,2,1,"o"],[1,3,1,"o"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"o"],[0,3,0,"o"]]},{"cells":[[2,2,2,"o"],[2,2,1,"s"],[2,2,0,"o"]],"start":[[0,0,0,"o"],[0,0,1,"s"],[0,0,2,"o"]]},{"cells":[[1,2,0,"o"],[0,2,0,"s"]],"start":[[0,0,0,"o"],[0,0,1,"s"]]},{"cells":[[1,2,2,"s"],[0,2,2,"o"],[0,2,1,"o"]],"start":[[0,0,0,"s"],[1,0,0,"o"],[1,0,1,"o"]]}],"order":[0,2,1,3]},{"name":"돛단배","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[2,0,0,"b"],[2,0,1,"b"],[2,1,0,"b"],[1,1,0,"b"]],"start":[[0,0,0,"b"],[1,0,0,"b"],[0,1,0,"b"],[0,1,1,"b"]]},{"cells":[[1,0,1,"b"],[1,0,0,"b"],[1,1,1,"b"],[2,1,1,"b"],[0,1,1,"b"],[0,1,0,"b"],[3,1,1,"b"],[4,1,1,"b"]],"start":[[3,0,0,"b"],[3,0,1,"b"],[0,1,0,"b"],[1,1,0,"b"],[2,1,0,"b"],[3,1,0,"b"],[4,1,0,"b"],[4,1,1,"b"]]},{"cells":[[3,0,1,"b"],[3,0,0,"b"],[3,1,0,"b"],[4,1,0,"b"]],"start":[[0,0,1,"b"],[1,0,1,"b"],[0,1,0,"b"],[0,1,1,"b"]]},{"cells":[[2,2,0,"k"],[2,3,0,"k"],[2,4,0,"k"]],"start":[[0,0,0,"k"],[0,1,0,"k"],[0,2,0,"k"]]},{"cells":[[0,3,1,"s"],[1,3,1,"s"],[1,4,1,"s"],[0,4,1,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[0,1,0,"s"],[0,1,1,"s"]]}],"order":[0,4,1,2,3]},{"name":"로켓","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[0,0,1,"r"],[1,0,1,"k"],[1,0,2,"k"],[1,0,3,"r"],[2,0,2,"k"],[2,0,1,"k"],[2,0,0,"r"],[3,0,2,"r"],[1,1,2,"s"],[1,1,3,"r"]],"start":[[2,0,0,"r"],[0,0,1,"r"],[1,0,1,"k"],[2,0,1,"k"],[1,0,2,"k"],[2,0,2,"k"],[3,0,2,"r"],[1,0,3,"r"],[2,1,0,"r"],[2,1,1,"s"]]},{"cells":[[3,1,2,"r"],[2,1,2,"s"],[2,1,1,"s"],[2,2,2,"s"],[1,2,2,"s"],[2,2,1,"s"],[1,2,1,"s"],[2,1,0,"r"]],"start":[[0,0,0,"r"],[1,0,0,"s"],[1,0,1,"s"],[1,0,2,"r"],[1,1,0,"s"],[2,1,0,"s"],[1,1,1,"s"],[2,1,1,"s"]]},{"cells":[[1,1,1,"s"],[0,1,1,"r"]],"start":[[0,0,0,"s"],[1,0,0,"r"]]},{"cells":[[2,3,1,"c"],[2,4,1,"s"],[2,3,2,"c"],[1,4,1,"s"],[2,4,2,"s"],[1,4,2,"s"],[1,3,1,"c"],[2,5,2,"r"],[1,5,1,"r"],[1,3,2,"c"]],"start":[[0,0,0,"c"],[1,0,0,"c"],[0,0,1,"c"],[1,0,1,"c"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[0,2,0,"r"],[1,2,1,"r"]]}],"order":[3,0,1,2]},{"name":"성탑","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[1,0,0,"m"],[1,1,0,"m"],[1,1,1,"m"],[1,0,1,"m"],[2,0,1,"m"],[0,0,0,"m"],[2,1,0,"m"],[2,0,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[0,0,2,"m"],[0,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"]]},{"cells":[[1,0,2,"n"],[2,0,2,"m"],[1,1,2,"m"],[0,0,2,"m"],[2,1,2,"m"],[0,1,2,"m"],[0,2,2,"m"],[2,1,1,"m"],[0,3,2,"m"]],"start":[[0,0,0,"m"],[0,0,1,"n"],[0,0,2,"m"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"],[1,1,2,"m"],[0,2,0,"m"],[0,3,0,"m"]]},{"cells":[[0,0,1,"m"],[0,1,1,"m"],[0,2,1,"m"],[0,2,0,"m"],[1,2,0,"m"],[0,1,0,"m"],[2,2,0,"m"],[0,3,0,"m"],[2,2,1,"m"],[1,2,1,"m"],[2,2,2,"m"],[1,3,1,"k"],[1,2,2,"m"],[2,3,0,"m"],[2,3,2,"m"]],"start":[[1,0,2,"m"],[0,1,2,"m"],[1,1,2,"m"],[0,2,0,"m"],[1,2,0,"m"],[2,2,0,"m"],[0,2,1,"m"],[1,2,1,"m"],[2,2,1,"m"],[0,2,2,"m"],[1,2,2,"m"],[0,3,0,"m"],[2,3,0,"m"],[1,3,1,"k"],[0,3,2,"m"]]},{"cells":[[1,4,1,"k"],[1,4,0,"r"]],"start":[[0,0,0,"k"],[0,0,1,"r"]]}],"order":[0,1,2,3]},{"name":"돌다리","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[4,0,1,"m"],[4,0,0,"m"],[4,1,1,"m"],[4,1,0,"m"],[3,1,1,"m"],[3,1,0,"m"],[4,2,1,"w"],[3,2,1,"w"]],"start":[[0,0,1,"m"],[1,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[0,2,0,"w"],[0,2,1,"w"]]},{"cells":[[0,0,1,"m"],[0,1,1,"m"],[0,2,1,"w"],[1,1,1,"m"],[1,2,1,"w"],[1,2,0,"w"],[0,1,0,"m"],[0,0,0,"m"],[1,1,0,"m"],[0,2,0,"w"]],"start":[[0,0,1,"m"],[1,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[0,2,0,"w"],[1,2,0,"w"],[0,2,1,"w"],[1,2,1,"w"]]},{"cells":[[2,2,1,"w"],[2,2,0,"w"],[3,2,0,"w"],[4,2,0,"w"]],"start":[[2,0,0,"w"],[0,0,1,"w"],[1,0,1,"w"],[2,0,1,"w"]]}],"order":[0,1,2]},{"name":"노란 택시","colour":true,"rules":{"support":false,"slide":false},"turn":"yaw","parts":[{"cells":[[0,0,0,"k"],[0,1,0,"y"],[0,1,1,"y"],[0,1,2,"y"],[1,1,1,"y"],[1,1,0,"y"],[2,1,1,"y"],[0,0,2,"k"]],"start":[[0,0,2,"k"],[2,0,2,"k"],[1,1,0,"y"],[0,1,1,"y"],[1,1,1,"y"],[0,1,2,"y"],[1,1,2,"y"],[2,1,2,"y"]]},{"cells":[[3,0,0,"k"],[3,1,0,"y"],[3,1,1,"y"],[3,1,2,"y"],[3,0,2,"k"],[2,1,0,"y"],[2,2,0,"c"],[1,2,0,"c"]],"start":[[0,0,2,"k"],[2,0,2,"k"],[2,1,1,"y"],[0,1,2,"y"],[1,1,2,"y"],[2,1,2,"y"],[2,2,0,"c"],[2,2,1,"c"]]},{"cells":[[2,1,2,"y"],[1,1,2,"y"],[2,2,2,"c"],[1,2,2,"c"],[1,2,1,"y"],[2,2,1,"y"]],"start":[[1,0,0,"y"],[1,0,1,"y"],[0,1,0,"y"],[1,1,0,"c"],[0,1,1,"y"],[1,1,1,"c"]]}],"order":[2,0,1]},{"name":"선인장 화분","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[1,0,0,"o"],[1,0,1,"o"],[0,0,0,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"],[0,0,1,"o"]]},{"cells":[[2,0,1,"o"],[2,0,2,"o"],[1,0,2,"o"],[2,0,0,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"],[0,0,1,"o"],[0,0,2,"o"]]},{"cells":[[0,0,2,"o"],[0,0,1,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"]]},{"cells":[[1,1,1,"G"],[1,2,1,"G"],[1,3,1,"G"],[0,3,1,"G"],[0,2,1,"G"]],"start":[[0,0,0,"G"],[0,1,0,"G"],[1,1,0,"G"],[0,2,0,"G"],[1,2,0,"G"]]},{"cells":[[2,2,1,"G"],[2,3,1,"G"]],"start":[[0,0,0,"G"],[0,1,0,"G"]]}],"order":[0,1,2,3,4]},{"name":"작은 나무","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[1,0,1,"n"],[1,1,1,"n"],[1,2,1,"g"],[1,2,0,"G"],[2,2,1,"g"],[1,2,2,"G"]],"start":[[0,0,0,"G"],[0,1,0,"g"],[1,1,0,"n"],[2,1,0,"n"],[0,1,1,"g"],[0,2,0,"G"]]},{"cells":[[0,2,1,"G"],[0,3,1,"g"],[0,3,2,"g"],[1,3,2,"G"]],"start":[[0,0,0,"G"],[1,0,0,"g"],[1,1,0,"g"],[1,1,1,"G"]]},{"cells":[[0,3,0,"G"],[1,3,0,"g"],[1,4,0,"g"],[2,3,0,"G"],[2,3,1,"G"],[1,3,1,"G"],[2,3,2,"g"]],"start":[[0,0,0,"g"],[0,0,1,"G"],[1,0,1,"G"],[0,0,2,"G"],[1,0,2,"g"],[2,0,2,"G"],[1,1,2,"g"]]},{"cells":[[0,4,1,"g"],[1,4,1,"o"],[1,4,2,"G"],[2,4,1,"o"]],"start":[[1,0,0,"G"],[0,1,0,"o"],[1,1,0,"o"],[2,1,0,"g"]]}],"order":[0,3,1,2]},{"name":"고무 오리","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[1,0,0,"y"],[1,1,0,"y"],[1,1,1,"y"],[0,0,0,"y"],[0,1,1,"y"],[1,0,1,"y"],[0,0,1,"y"],[0,1,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"],[0,1,0,"y"],[1,1,0,"y"],[0,1,1,"y"],[1,1,1,"y"]]},{"cells":[[2,0,0,"y"],[2,1,0,"y"],[2,2,0,"y"],[2,1,1,"y"],[2,0,1,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,1,0,"y"],[1,1,0,"y"],[0,2,0,"y"]]},{"cells":[[1,2,1,"y"],[2,2,1,"y"],[1,3,1,"y"],[1,2,0,"y"]],"start":[[1,0,0,"y"],[0,1,0,"y"],[1,1,0,"y"],[1,1,1,"y"]]},{"cells":[[2,3,0,"y"],[3,3,0,"o"],[1,3,0,"y"],[2,3,1,"y"],[3,3,1,"o"]],"start":[[0,0,1,"y"],[0,0,2,"o"],[0,1,0,"y"],[0,1,1,"y"],[0,1,2,"o"]]}],"order":[1,0,2,3]},{"name":"등대","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[0,0,0,"s"],[0,0,1,"s"],[1,0,0,"s"],[0,1,0,"r"],[1,0,1,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[1,1,1,"r"]]},{"cells":[[1,1,0,"r"],[1,2,0,"s"],[1,2,1,"s"],[1,3,1,"r"],[0,2,0,"s"]],"start":[[1,0,0,"r"],[0,0,1,"s"],[1,0,1,"s"],[0,0,2,"r"],[0,1,1,"s"]]},{"cells":[[0,1,1,"r"],[0,2,1,"s"],[0,3,1,"r"],[0,3,0,"r"],[1,3,0,"r"],[1,1,1,"r"]],"start":[[0,0,0,"r"],[1,0,2,"r"],[0,1,0,"r"],[0,1,1,"s"],[0,1,2,"r"],[1,1,2,"r"]]},{"cells":[[1,4,0,"y"],[1,5,0,"r"],[0,4,0,"y"],[0,4,1,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"],[1,0,1,"r"],[0,1,0,"y"]]},{"cells":[[1,4,1,"y"],[1,5,1,"r"],[0,5,1,"r"],[0,5,0,"r"]],"start":[[1,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[0,1,1,"y"]]}],"order":[0,1,2,3,4]},{"name":"눈사람","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[2,0,0,"s"],[1,0,0,"s"],[0,0,0,"s"],[2,0,1,"s"],[2,0,2,"s"],[2,1,1,"s"],[2,1,0,"s"],[1,0,2,"s"],[2,2,0,"s"],[0,0,2,"s"],[1,1,0,"s"],[0,1,0,"s"]],"start":[[2,0,0,"s"],[2,0,1,"s"],[2,0,2,"s"],[1,1,2,"s"],[2,1,2,"s"],[1,2,0,"s"],[2,2,0,"s"],[1,2,1,"s"],[2,2,1,"s"],[0,2,2,"s"],[1,2,2,"s"],[2,2,2,"s"]]},{"cells":[[0,0,1,"s"],[0,1,1,"s"],[1,0,1,"s"],[1,1,1,"s"],[1,2,1,"s"],[1,2,0,"s"],[1,3,1,"s"],[1,2,2,"s"],[0,3,1,"s"]],"start":[[0,0,1,"s"],[1,0,1,"s"],[3,0,1,"s"],[2,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[3,1,1,"s"],[2,1,2,"s"]]},{"cells":[[0,1,2,"s"],[1,1,2,"s"],[2,1,2,"s"],[0,2,2,"s"],[0,3,2,"s"],[1,3,2,"s"],[1,3,3,"o"],[1,4,2,"k"],[1,4,1,"k"],[2,4,2,"k"],[0,3,3,"k"]],"start":[[1,0,0,"k"],[1,0,3,"s"],[0,1,0,"k"],[1,1,0,"k"],[1,1,1,"s"],[2,1,1,"o"],[1,1,3,"s"],[1,2,1,"s"],[2,2,1,"k"],[1,2,2,"s"],[1,2,3,"s"]]},{"cells":[[0,2,1,"s"],[0,2,0,"s"],[0,3,0,"s"],[0,4,0,"k"],[1,4,0,"k"],[0,4,1,"k"],[0,4,2,"k"],[2,4,0,"k"],[1,3,0,"s"],[2,4,1,"k"],[2,3,0,"s"]],"start":[[0,0,0,"k"],[0,0,1,"k"],[2,0,1,"k"],[0,0,2,"k"],[1,0,2,"k"],[2,0,2,"k"],[0,1,2,"s"],[1,1,2,"s"],[2,1,2,"s"],[0,2,1,"s"],[0,2,2,"s"]]},{"cells":[[2,2,2,"s"],[2,2,1,"s"],[2,3,1,"s"],[2,3,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"]]}],"order":[0,2,1,3,4]},{"name":"로봇","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[3,0,0,"k"],[3,1,0,"b"],[2,1,0,"b"],[2,2,0,"b"],[1,2,0,"b"],[0,2,0,"b"]],"start":[[0,0,1,"b"],[0,0,2,"k"],[0,1,0,"b"],[0,1,1,"b"],[0,2,0,"b"],[0,3,0,"b"]]},{"cells":[[1,0,0,"k"],[1,1,0,"b"],[1,1,1,"b"],[2,1,1,"b"]],"start":[[1,0,0,"b"],[0,0,1,"b"],[1,0,1,"b"],[1,1,0,"k"]]},{"cells":[[3,1,1,"b"],[3,2,1,"b"],[3,3,1,"s"],[2,2,1,"b"],[3,2,0,"b"],[4,2,0,"b"],[3,3,2,"c"]],"start":[[1,0,1,"b"],[0,1,0,"c"],[1,1,0,"s"],[1,1,1,"b"],[2,1,1,"b"],[1,1,2,"b"],[2,2,1,"b"]]},{"cells":[[1,2,1,"b"],[1,3,1,"s"],[2,3,1,"s"],[1,3,2,"c"],[1,3,0,"s"]],"start":[[1,0,1,"b"],[1,1,0,"c"],[0,1,1,"s"],[1,1,1,"s"],[1,1,2,"s"]]},{"cells":[[2,3,0,"s"],[3,3,0,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"]]}],"order":[3,1,0,2,4]},{"name":"초록 지붕 집","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[2,0,0,"p"],[2,1,0,"p"],[1,0,0,"p"],[2,2,0,"G"],[0,0,0,"p"],[3,2,0,"G"],[1,1,0,"p"],[1,2,0,"G"],[3,1,0,"p"],[0,0,1,"p"],[1,2,1,"G"],[3,2,1,"G"],[1,1,1,"p"],[1,0,1,"p"]],"start":[[2,0,0,"p"],[3,0,0,"p"],[1,0,1,"p"],[2,0,1,"p"],[3,0,1,"p"],[2,1,0,"p"],[0,1,1,"p"],[1,1,1,"p"],[2,1,1,"p"],[0,2,0,"G"],[2,2,0,"G"],[0,2,1,"G"],[1,2,1,"G"],[2,2,1,"G"]]},{"cells":[[0,0,2,"p"],[0,1,2,"p"],[0,2,2,"G"],[0,2,1,"G"],[1,0,2,"p"],[0,1,1,"c"],[2,0,2,"n"],[0,2,0,"G"],[2,0,1,"p"],[3,0,2,"p"],[3,0,1,"p"],[0,1,0,"p"]],"start":[[0,0,0,"G"],[1,0,0,"p"],[2,0,0,"p"],[2,0,1,"p"],[2,0,2,"n"],[2,0,3,"p"],[0,1,0,"G"],[1,1,0,"c"],[2,1,2,"p"],[2,1,3,"p"],[0,2,0,"G"],[1,2,0,"p"]]},{"cells":[[4,0,0,"p"],[4,0,1,"p"],[4,1,0,"p"],[3,0,0,"p"],[4,2,0,"G"],[4,0,2,"p"],[4,2,1,"G"],[4,3,0,"m"],[4,1,1,"c"],[4,1,2,"p"],[3,1,2,"p"],[4,3,1,"G"]],"start":[[1,0,0,"p"],[0,0,1,"p"],[1,0,1,"p"],[1,1,0,"p"],[1,1,1,"c"],[1,1,2,"G"],[1,1,3,"G"],[0,2,0,"p"],[1,2,0,"p"],[1,2,1,"p"],[1,2,2,"G"],[1,2,3,"m"]]},{"cells":[[2,1,2,"p"],[2,1,1,"p"],[2,2,1,"G"],[2,2,2,"G"],[1,2,2,"G"],[3,2,2,"G"],[1,1,2,"p"],[3,1,1,"p"],[2,3,1,"G"],[4,2,2,"G"],[1,3,1,"G"],[0,3,1,"G"],[3,3,1,"G"]],"start":[[1,0,1,"G"],[2,0,1,"p"],[1,0,2,"G"],[2,0,2,"p"],[1,0,3,"G"],[1,0,4,"G"],[0,1,0,"G"],[0,1,1,"G"],[0,1,2,"G"],[1,1,2,"G"],[2,1,2,"p"],[0,1,3,"G"],[2,1,3,"p"]]}],"order":[0,1,2,3]},{"name":"버섯","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[2,0,2,"s"],[2,0,1,"s"],[1,0,2,"s"],[2,1,1,"s"],[1,0,1,"s"],[2,1,2,"s"],[2,2,2,"s"]],"start":[[0,0,1,"s"],[0,1,0,"s"],[0,1,1,"s"],[0,2,0,"s"],[1,2,0,"s"],[0,2,1,"s"],[1,2,1,"s"]]},{"cells":[[1,1,1,"s"],[1,2,1,"s"],[1,3,1,"o"],[2,3,1,"s"],[1,1,2,"s"],[0,3,1,"o"],[1,2,2,"s"],[2,2,1,"s"]],"start":[[0,0,2,"o"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[0,1,2,"o"],[0,2,1,"s"],[0,2,2,"s"]]},{"cells":[[3,3,3,"s"],[3,3,2,"o"],[3,3,1,"o"],[2,3,2,"o"],[3,3,0,"s"],[1,3,2,"s"],[2,3,0,"o"]],"start":[[0,0,2,"s"],[0,1,0,"s"],[0,1,1,"o"],[0,1,2,"o"],[0,2,2,"o"],[0,3,1,"o"],[0,3,2,"s"]]},{"cells":[[2,3,3,"o"],[1,3,3,"o"],[0,3,3,"s"],[0,3,2,"o"]],"start":[[0,0,0,"s"],[0,0,1,"o"],[0,0,2,"o"],[0,1,0,"o"]]},{"cells":[[1,3,0,"o"],[0,3,0,"s"]],"start":[[0,0,0,"s"],[0,0,1,"o"]]},{"cells":[[2,4,1,"o"],[2,4,2,"o"],[1,4,2,"o"],[1,4,1,"o"]],"start":[[0,0,0,"o"],[0,0,1,"o"],[0,1,0,"o"],[0,1,1,"o"]]}],"order":[0,2,1,3,4,5]},{"name":"돛단배","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[3,0,1,"n"],[4,0,1,"n"],[4,0,0,"n"],[2,0,1,"n"],[2,1,1,"n"],[1,0,1,"n"],[4,1,1,"n"],[3,1,1,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[1,0,1,"n"],[1,0,2,"n"],[1,0,3,"n"],[1,1,0,"n"],[1,1,1,"n"],[1,1,2,"n"]]},{"cells":[[3,0,0,"n"],[2,0,0,"n"],[3,1,0,"n"],[1,0,0,"n"],[2,1,0,"n"],[1,1,0,"n"],[3,2,0,"k"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[2,0,0,"k"],[0,1,0,"n"],[1,1,0,"n"],[0,2,0,"n"],[1,2,0,"n"]]},{"cells":[[4,1,0,"n"],[5,1,0,"n"],[5,1,1,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[0,0,1,"n"]]},{"cells":[[0,1,0,"n"],[0,1,1,"n"],[1,1,1,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[0,0,1,"n"]]},{"cells":[[3,3,0,"k"],[3,4,0,"k"],[3,5,0,"k"],[3,6,0,"r"]],"start":[[0,0,0,"r"],[0,1,0,"k"],[0,2,0,"k"],[0,3,0,"k"]]},{"cells":[[2,3,1,"s"],[2,4,1,"s"],[1,4,1,"s"],[1,3,1,"s"],[2,5,1,"s"],[1,5,1,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[0,0,2,"s"],[0,1,0,"s"],[0,1,1,"s"],[0,1,2,"s"]]}],"order":[2,0,1,5,3,4]},{"name":"로켓","colour":true,"rules":{"support":false,"slide":false},"turn":"any","parts":[{"cells":[[0,0,1,"o"],[1,0,1,"k"],[1,0,2,"k"],[0,1,1,"o"],[2,0,1,"k"],[1,0,3,"o"],[2,0,2,"k"],[1,1,1,"s"],[1,1,2,"s"],[1,1,3,"o"]],"start":[[0,0,2,"o"],[1,0,2,"o"],[0,1,0,"o"],[1,1,0,"o"],[0,1,1,"k"],[1,1,1,"s"],[0,1,2,"k"],[1,1,2,"s"],[0,2,1,"k"],[0,2,2,"k"]]},{"cells":[[3,0,2,"o"],[3,1,2,"o"],[2,1,2,"s"],[2,2,2,"s"],[2,3,2,"c"],[2,4,2,"s"],[2,2,1,"s"]],"start":[[1,0,1,"o"],[0,1,1,"s"],[1,1,1,"o"],[0,2,0,"s"],[0,2,1,"s"],[0,3,1,"c"],[0,4,1,"s"]]},{"cells":[[2,0,0,"o"],[2,1,0,"o"],[2,1,1,"s"]],"start":[[1,0,0,"o"],[0,1,0,"s"],[1,1,0,"o"]]},{"cells":[[1,2,1,"s"],[1,3,1,"c"],[2,3,1,"c"],[2,4,1,"s"],[1,4,1,"s"],[1,2,2,"s"],[2,5,1,"s"],[1,3,2,"c"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[0,1,0,"c"],[1,1,0,"c"],[0,1,1,"c"],[0,2,0,"s"],[1,2,0,"s"],[1,3,0,"s"]]},{"cells":[[1,4,2,"s"],[1,5,2,"s"],[2,5,2,"s"],[1,5,1,"s"],[2,6,2,"r"],[1,6,1,"r"],[1,7,1,"r"]],"start":[[0,0,1,"s"],[0,0,2,"r"],[0,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[1,1,2,"r"],[1,1,3,"r"]]}],"order":[4,0,1,3,2]},{"name":"작은 식탁","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,0,"n"],[2,1,0,"n"],[2,2,0,"W"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[2,0,0,"W"]]},{"cells":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"W"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[2,0,0,"W"]]},{"cells":[[2,0,2,"n"],[2,1,2,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"]]},{"cells":[[0,0,2,"n"],[0,1,2,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"]]},{"cells":[[1,2,2,"W"],[0,2,2,"W"]],"start":[[0,0,0,"W"],[0,1,0,"W"]]},{"cells":[[1,2,1,"W"],[1,2,0,"W"],[0,2,1,"W"]],"start":[[0,0,0,"W"],[1,0,0,"W"],[0,0,1,"W"]]},{"cells":[[2,2,2,"W"],[2,2,1,"W"]],"start":[[0,0,0,"W"],[0,0,1,"W"]]}],"order":[0,3,1,2,4,6,5]},{"name":"레몬 케이크","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[3,0,1,"n"],[3,0,0,"n"],[3,0,2,"n"],[2,0,0,"n"],[2,1,0,"y"],[2,0,2,"n"],[3,0,3,"n"],[3,1,0,"y"]],"start":[[3,0,0,"y"],[1,0,1,"n"],[3,0,1,"n"],[3,1,0,"y"],[0,1,1,"n"],[1,1,1,"n"],[2,1,1,"n"],[3,1,1,"n"]]},{"cells":[[1,0,2,"n"],[0,0,2,"n"],[0,0,3,"n"],[1,0,3,"n"],[1,0,1,"n"],[0,0,1,"n"],[0,1,2,"y"],[2,0,3,"n"]],"start":[[0,0,1,"n"],[1,0,1,"n"],[0,1,0,"y"],[0,1,1,"n"],[1,1,1,"n"],[0,2,1,"n"],[1,2,1,"n"],[2,2,1,"n"]]},{"cells":[[0,0,0,"n"],[0,1,0,"y"],[1,1,0,"y"],[1,0,0,"n"],[0,1,1,"y"],[1,1,1,"y"],[1,1,2,"y"],[1,2,1,"r"]],"start":[[2,0,0,"n"],[2,0,1,"n"],[1,1,0,"y"],[2,1,0,"y"],[0,1,1,"y"],[1,1,1,"y"],[2,1,1,"y"],[1,2,1,"r"]]},{"cells":[[2,0,1,"n"],[2,1,1,"y"],[3,1,1,"y"],[3,1,2,"y"],[2,1,2,"y"],[3,1,3,"y"],[2,1,3,"y"],[2,2,2,"r"]],"start":[[1,0,0,"y"],[1,0,1,"y"],[0,1,0,"r"],[1,1,0,"y"],[1,1,1,"y"],[1,2,0,"y"],[2,2,0,"n"],[1,2,1,"y"]]},{"cells":[[0,1,3,"y"],[1,1,3,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"]]}],"order":[0,1,2,3,4]},{"name":"풍차","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,0,"m"],[1,0,0,"m"],[2,0,1,"m"],[1,1,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[0,1,1,"m"]]},{"cells":[[1,0,1,"m"],[1,1,1,"m"],[2,1,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,1,0,"m"]]},{"cells":[[1,1,2,"s"],[1,2,2,"W"],[2,2,2,"s"],[2,2,1,"m"],[1,3,2,"s"],[0,2,2,"s"],[1,2,1,"m"]],"start":[[0,0,1,"s"],[1,0,1,"m"],[0,1,0,"s"],[0,1,1,"W"],[1,1,1,"m"],[0,1,2,"s"],[0,2,1,"s"]]},{"cells":[[2,1,0,"m"],[2,2,0,"m"],[2,3,0,"r"],[2,3,1,"r"],[1,3,1,"r"],[1,2,0,"m"],[1,3,0,"r"]],"start":[[0,0,0,"r"],[1,0,0,"m"],[2,0,0,"m"],[0,0,1,"r"],[1,0,1,"m"],[0,1,0,"r"],[0,1,1,"r"]]}],"order":[0,1,2,3]},{"name":"선인장 화분","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[0,0,0,"o"],[0,0,1,"o"],[1,0,1,"o"],[1,0,2,"o"],[0,0,2,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"],[0,0,1,"o"],[1,0,1,"o"],[2,0,1,"o"]]},{"cells":[[2,0,1,"o"],[2,0,0,"o"],[2,0,2,"o"],[1,0,0,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"],[1,1,0,"o"],[2,1,0,"o"]]},{"cells":[[1,1,1,"G"],[1,2,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"]]},{"cells":[[0,2,1,"G"],[0,3,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"]]},{"cells":[[2,2,1,"G"],[2,3,1,"G"],[1,3,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"],[1,0,1,"G"]]}],"order":[1,0,2,3,4]},{"name":"작은 나무","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[1,0,1,"n"],[1,1,1,"n"],[1,2,1,"g"],[2,2,1,"G"],[1,2,2,"o"]],"start":[[0,0,0,"n"],[0,0,1,"n"],[0,0,2,"g"],[1,0,2,"o"],[0,1,2,"G"]]},{"cells":[[1,2,0,"G"],[1,3,0,"g"],[1,3,1,"g"],[1,3,2,"g"]],"start":[[0,0,0,"g"],[0,0,1,"G"],[0,1,0,"g"],[0,2,0,"g"]]},{"cells":[[0,2,1,"g"],[0,3,1,"G"],[0,4,1,"g"],[0,3,0,"g"],[0,3,2,"g"]],"start":[[1,0,0,"g"],[0,0,1,"g"],[1,0,1,"G"],[2,0,1,"g"],[1,0,2,"g"]]},{"cells":[[2,3,2,"g"],[2,3,1,"G"],[2,3,0,"o"]],"start":[[0,0,0,"o"],[0,0,1,"G"],[0,0,2,"g"]]},{"cells":[[1,4,1,"g"],[1,4,2,"G"],[2,4,1,"g"],[1,4,0,"G"]],"start":[[0,0,0,"G"],[0,0,1,"g"],[0,0,2,"G"],[0,1,1,"g"]]}],"order":[0,1,2,3,4]},{"name":"고무 오리","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[0,0,1,"y"],[0,0,0,"y"],[1,0,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,1,0,"y"]]},{"cells":[[1,0,1,"y"],[2,0,1,"y"],[2,0,0,"y"],[2,1,1,"y"]],"start":[[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"],[1,1,1,"y"]]},{"cells":[[2,1,0,"y"],[1,1,0,"y"],[1,2,0,"y"],[1,3,0,"y"]],"start":[[0,0,1,"y"],[0,1,1,"y"],[0,2,0,"y"],[0,2,1,"y"]]},{"cells":[[0,1,1,"y"],[0,1,0,"y"],[1,1,1,"y"]],"start":[[0,0,0,"y"],[0,1,0,"y"],[1,1,0,"y"]]},{"cells":[[2,2,0,"y"],[2,2,1,"y"],[1,2,1,"y"],[1,3,1,"y"]],"start":[[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"],[0,1,1,"y"]]},{"cells":[[3,3,1,"o"],[3,3,0,"o"],[2,3,1,"y"],[2,3,0,"y"]],"start":[[0,0,0,"o"],[1,0,0,"y"],[0,1,0,"o"],[1,1,0,"y"]]}],"order":[0,1,2,3,4,5]},{"name":"등대","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[1,0,3,"m"],[2,0,3,"m"],[2,0,2,"m"],[0,0,3,"m"],[3,0,3,"m"],[2,0,1,"m"],[3,0,1,"m"],[2,1,1,"r"],[3,0,2,"m"],[2,2,1,"s"]],"start":[[0,0,2,"m"],[1,0,2,"m"],[2,0,2,"m"],[0,1,0,"s"],[0,1,1,"r"],[0,1,2,"m"],[1,1,2,"m"],[2,1,2,"m"],[2,2,2,"m"],[2,3,2,"m"]]},{"cells":[[0,0,2,"m"],[1,0,2,"m"],[1,0,1,"m"],[1,0,0,"m"],[0,0,1,"m"],[0,0,0,"m"],[1,1,1,"r"],[1,1,2,"r"],[1,2,2,"s"],[2,1,2,"r"]],"start":[[1,0,0,"s"],[1,1,0,"r"],[2,1,0,"r"],[1,1,1,"r"],[0,2,0,"m"],[1,2,0,"m"],[0,2,1,"m"],[1,2,1,"m"],[0,2,2,"m"],[1,2,2,"m"]]},{"cells":[[2,0,0,"m"],[3,0,0,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"]]},{"cells":[[1,2,1,"s"],[1,3,1,"r"],[1,4,1,"s"],[2,3,1,"r"],[2,4,1,"s"],[2,5,1,"y"],[1,5,1,"y"]],"start":[[0,0,0,"y"],[0,0,1,"s"],[0,0,2,"r"],[0,1,0,"y"],[0,1,1,"s"],[0,1,2,"r"],[0,1,3,"s"]]},{"cells":[[2,2,2,"s"],[2,3,2,"r"],[2,4,2,"s"],[1,4,2,"s"],[2,5,2,"y"],[1,5,2,"y"],[1,3,2,"r"]],"start":[[0,0,0,"y"],[1,0,0,"s"],[2,0,0,"r"],[0,0,1,"y"],[1,0,1,"s"],[2,0,1,"r"],[3,0,1,"s"]]},{"cells":[[1,6,1,"r"],[2,6,1,"r"],[2,6,2,"r"],[1,6,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[0,1,0,"r"],[1,1,0,"r"]]}],"order":[0,3,1,2,4,5]},{"name":"눈사람","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[1,1,1,"s"],[0,1,1,"s"],[2,1,1,"s"],[1,1,2,"s"],[2,1,0,"s"],[1,0,2,"s"],[0,1,0,"s"],[1,0,0,"s"],[1,2,2,"s"],[2,0,0,"s"]],"start":[[1,0,0,"s"],[1,0,1,"s"],[1,0,2,"s"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[1,1,2,"s"],[2,1,2,"s"],[0,2,1,"s"],[2,2,1,"s"],[0,2,2,"s"],[1,2,2,"s"],[2,2,2,"s"]]},{"cells":[[0,0,2,"s"],[0,1,2,"s"],[0,2,2,"s"],[0,3,2,"s"],[0,2,1,"s"],[0,2,0,"s"],[1,2,0,"s"],[1,1,0,"s"],[1,2,1,"s"],[2,2,1,"s"],[2,2,0,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[2,0,1,"s"],[0,0,2,"s"],[0,0,3,"s"],[1,1,1,"s"],[2,1,1,"s"],[2,1,2,"s"],[1,2,1,"s"],[2,2,1,"s"]]},{"cells":[[2,0,1,"s"],[2,0,2,"s"],[2,1,2,"s"],[2,2,2,"s"],[2,2,3,"r"],[2,3,2,"s"],[2,3,1,"s"],[2,3,0,"s"],[2,4,0,"k"],[1,3,2,"s"],[1,4,0,"k"],[2,4,1,"k"],[1,3,0,"s"],[2,4,2,"k"]],"start":[[0,0,1,"s"],[0,0,2,"s"],[0,1,1,"s"],[0,2,0,"r"],[0,2,1,"s"],[0,3,1,"s"],[1,3,1,"s"],[0,3,2,"s"],[0,3,3,"s"],[1,3,3,"s"],[0,4,1,"k"],[0,4,2,"k"],[0,4,3,"k"],[1,4,3,"k"]]},{"cells":[[0,3,3,"k"],[1,3,3,"o"]],"start":[[0,0,0,"k"],[0,0,1,"o"]]},{"cells":[[1,3,1,"s"],[1,4,1,"k"],[0,3,1,"s"],[0,3,0,"s"],[0,4,1,"k"],[1,4,2,"k"],[0,4,0,"k"],[0,4,2,"k"],[1,5,1,"k"]],"start":[[1,0,0,"k"],[0,0,1,"k"],[1,0,1,"k"],[2,0,1,"s"],[1,1,0,"k"],[1,1,1,"k"],[2,1,1,"s"],[1,1,2,"k"],[2,1,2,"s"]]}],"order":[0,1,2,3,4]},{"name":"로봇","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[1,0,0,"k"],[1,1,0,"m"],[0,1,0,"y"],[0,2,0,"m"],[1,2,0,"m"]],"start":[[1,0,0,"k"],[0,1,0,"y"],[1,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"]]},{"cells":[[3,0,0,"k"],[3,1,0,"m"],[2,1,0,"m"],[2,2,0,"m"],[3,2,0,"m"],[4,1,0,"y"],[3,2,1,"m"],[4,2,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"y"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[0,1,2,"k"],[0,2,0,"m"],[0,2,1,"m"]]},{"cells":[[3,1,1,"m"],[2,1,1,"m"],[1,1,1,"m"],[1,2,1,"m"],[2,2,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[1,0,2,"m"]]},{"cells":[[1,3,2,"c"],[1,3,1,"s"],[1,3,0,"s"],[2,3,1,"s"]],"start":[[1,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"],[2,1,0,"c"]]},{"cells":[[2,3,0,"s"],[2,4,0,"r"],[3,3,0,"s"],[3,3,1,"s"],[3,3,2,"c"]],"start":[[0,0,0,"r"],[0,0,1,"s"],[1,0,1,"s"],[1,1,1,"s"],[1,2,1,"c"]]}],"order":[0,1,2,3,4]},{"name":"빨간 지붕 집","colour":true,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[0,0,2,"p"],[1,0,2,"p"],[0,1,2,"p"],[0,0,1,"p"],[2,0,2,"n"],[3,0,2,"p"],[1,0,1,"p"],[0,1,1,"c"],[1,1,1,"p"],[0,0,0,"p"]],"start":[[1,0,0,"p"],[1,1,0,"n"],[1,2,0,"p"],[0,2,1,"p"],[1,2,1,"p"],[0,3,0,"p"],[1,3,0,"p"],[0,3,1,"c"],[1,3,1,"p"],[1,3,2,"p"]]},{"cells":[[1,0,0,"p"],[2,0,0,"p"],[2,0,1,"p"],[1,1,0,"p"],[0,1,0,"p"],[3,0,0,"p"],[3,1,0,"p"]],"start":[[0,0,1,"p"],[0,1,0,"p"],[0,1,1,"p"],[0,2,0,"p"],[1,2,0,"p"],[0,3,0,"p"],[0,3,1,"p"]]},{"cells":[[3,0,1,"p"],[3,1,1,"c"],[3,2,1,"r"],[3,1,2,"p"],[3,2,2,"r"],[3,3,1,"r"]],"start":[[1,0,0,"p"],[0,0,1,"p"],[1,0,1,"c"],[0,0,2,"r"],[1,0,2,"r"],[1,0,3,"r"]]},{"cells":[[1,1,2,"p"],[1,2,2,"r"],[2,1,2,"p"],[1,2,1,"r"],[2,2,1,"r"],[1,2,0,"r"],[2,2,2,"r"],[0,2,1,"r"],[2,2,0,"r"],[2,1,0,"p"],[2,1,1,"p"],[0,2,2,"r"],[0,2,0,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[2,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[2,0,1,"r"],[0,0,2,"r"],[1,0,2,"r"],[2,0,2,"r"],[2,1,1,"p"],[0,1,2,"p"],[1,1,2,"p"],[2,1,2,"p"]]},{"cells":[[3,2,0,"r"],[3,3,0,"m"]],"start":[[0,0,0,"r"],[1,0,0,"m"]]},{"cells":[[0,3,1,"r"],[1,3,1,"r"],[2,3,1,"r"]],"start":[[0,0,0,"r"],[0,0,1,"r"],[0,0,2,"r"]]}],"order":[0,2,1,3,4,5]},{"name":"성탑","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[1,0,1,"m"],[2,0,1,"m"],[2,0,2,"m"],[0,0,1,"m"],[0,0,2,"m"],[0,1,1,"m"]],"start":[[0,0,0,"m"],[0,0,2,"m"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"],[1,1,2,"m"]]},{"cells":[[0,0,0,"m"],[1,0,0,"m"],[1,1,0,"m"],[0,1,0,"m"],[2,0,0,"m"],[2,1,0,"m"],[2,2,0,"m"],[1,1,1,"m"],[1,2,1,"m"],[2,3,0,"m"]],"start":[[0,0,1,"m"],[1,0,1,"m"],[2,0,1,"m"],[3,0,1,"m"],[1,1,0,"m"],[2,1,0,"m"],[2,1,1,"m"],[3,1,1,"m"],[2,2,1,"m"],[3,2,1,"m"]]},{"cells":[[1,0,2,"n"],[1,1,2,"m"],[0,1,2,"m"],[1,2,2,"m"],[2,2,2,"m"],[2,1,2,"m"],[2,3,2,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"],[2,2,0,"m"],[1,3,0,"n"]]},{"cells":[[2,1,1,"m"],[2,2,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"]]},{"cells":[[0,2,2,"m"],[0,2,1,"m"],[0,2,0,"m"],[0,3,0,"m"],[1,2,0,"m"],[0,3,2,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"],[0,2,1,"m"]]},{"cells":[[1,3,1,"k"],[1,4,1,"k"],[1,4,0,"r"]],"start":[[0,0,0,"r"],[0,1,0,"k"],[1,1,0,"k"]]}],"order":[0,3,1,2,5,4]},{"name":"돌다리","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[4,0,0,"m"],[4,0,1,"m"],[4,1,1,"m"],[4,1,0,"m"],[3,1,1,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"]]},{"cells":[[0,0,1,"m"],[0,1,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,0,0,"m"]],"start":[[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[1,1,0,"m"],[1,1,1,"m"]]},{"cells":[[3,1,0,"m"],[3,2,0,"w"],[2,2,0,"w"],[3,2,1,"w"],[2,2,1,"w"]],"start":[[0,0,0,"w"],[0,0,1,"w"],[1,0,1,"m"],[0,1,0,"w"],[0,1,1,"w"]]},{"cells":[[1,1,1,"m"],[1,2,1,"w"],[0,2,1,"w"],[1,2,0,"w"],[0,2,0,"w"]],"start":[[1,0,0,"m"],[0,0,1,"w"],[1,0,1,"w"],[0,1,1,"w"],[1,1,1,"w"]]},{"cells":[[4,2,1,"w"],[4,2,0,"w"]],"start":[[0,0,0,"w"],[0,0,1,"w"]]}],"order":[0,1,2,3,4]},{"name":"초록 자동차","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[3,0,2,"k"],[3,1,2,"g"],[2,1,2,"g"],[2,1,1,"g"]],"start":[[0,0,0,"g"],[0,1,0,"g"],[1,1,0,"g"],[1,1,1,"k"]]},{"cells":[[0,0,2,"k"],[0,1,2,"g"],[0,1,1,"g"],[1,1,2,"g"],[1,1,1,"g"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,0,1,"k"],[0,1,0,"g"],[1,1,0,"g"]]},{"cells":[[0,0,0,"k"],[0,1,0,"g"],[1,1,0,"g"],[1,2,0,"c"]],"start":[[0,0,0,"c"],[1,0,0,"g"],[1,1,0,"g"],[2,1,0,"k"]]},{"cells":[[3,0,0,"k"],[3,1,0,"g"],[3,1,1,"g"],[2,1,0,"g"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,0,1,"g"],[0,1,0,"k"]]},{"cells":[[2,2,1,"g"],[2,2,0,"c"],[2,2,2,"c"],[1,2,2,"c"],[1,2,1,"g"]],"start":[[0,0,0,"c"],[1,0,0,"c"],[0,0,1,"g"],[1,0,1,"g"],[0,0,2,"c"]]}],"order":[0,1,2,3,4]},{"name":"작은 식탁","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,2,"n"],[2,1,2,"n"],[2,2,2,"w"],[1,2,2,"w"]],"start":[[0,0,0,"w"],[1,0,0,"n"],[2,0,0,"n"],[0,1,0,"w"]]},{"cells":[[0,0,2,"n"],[0,1,2,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"]]},{"cells":[[2,0,0,"n"],[2,1,0,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"]]},{"cells":[[0,0,0,"n"],[0,1,0,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"]]},{"cells":[[2,2,1,"w"],[2,2,0,"w"],[1,2,0,"w"],[0,2,0,"w"]],"start":[[0,0,0,"w"],[1,0,0,"w"],[1,0,1,"w"],[1,0,2,"w"]]},{"cells":[[0,2,1,"w"],[1,2,1,"w"],[0,2,2,"w"]],"start":[[1,0,0,"w"],[0,1,0,"w"],[1,1,0,"w"]]}],"order":[0,1,2,3,4,5]},{"name":"생크림 케이크","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,3,"n"],[3,0,3,"n"],[1,0,3,"n"],[3,1,3,"s"],[1,1,3,"s"],[2,0,2,"n"],[1,0,2,"n"]],"start":[[1,0,1,"n"],[1,0,2,"n"],[0,1,0,"s"],[1,1,0,"n"],[1,1,1,"n"],[0,1,2,"s"],[1,1,2,"n"]]},{"cells":[[2,0,0,"n"],[3,0,0,"n"],[1,0,0,"n"],[3,0,1,"n"],[0,0,0,"n"]],"start":[[1,0,0,"n"],[1,0,1,"n"],[1,0,2,"n"],[0,0,3,"n"],[1,0,3,"n"]]},{"cells":[[1,0,1,"n"],[1,1,1,"s"],[0,1,1,"s"],[0,0,1,"n"],[2,1,1,"s"],[2,0,1,"n"],[1,2,1,"r"]],"start":[[1,0,0,"s"],[2,0,0,"n"],[0,0,1,"r"],[1,0,1,"s"],[2,0,1,"n"],[1,0,2,"s"],[2,0,2,"n"]]},{"cells":[[3,0,2,"n"],[3,1,2,"s"],[2,1,2,"s"],[2,2,2,"r"],[2,1,3,"s"],[1,1,2,"s"],[0,1,2,"s"],[3,1,1,"s"],[0,1,3,"s"]],"start":[[2,0,1,"r"],[0,1,0,"s"],[2,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[3,1,1,"s"],[3,1,2,"s"],[3,2,1,"n"]]},{"cells":[[0,0,2,"n"],[0,0,3,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"]]},{"cells":[[3,1,0,"s"],[2,1,0,"s"],[1,1,0,"s"],[0,1,0,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"s"],[0,3,0,"s"]]}],"order":[0,1,2,3,4,5]},{"name":"풍차","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,0,"m"],[2,1,0,"m"],[2,0,1,"m"],[2,2,0,"m"],[1,1,0,"m"],[2,2,1,"m"],[1,0,0,"m"],[2,1,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[0,0,2,"m"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"]]},{"cells":[[1,0,1,"m"],[1,1,1,"m"],[1,1,2,"s"],[1,2,1,"m"]],"start":[[0,0,1,"s"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"]]},{"cells":[[2,2,2,"s"],[1,2,2,"W"],[1,3,2,"s"],[0,2,2,"s"]],"start":[[1,0,0,"s"],[0,1,0,"s"],[1,1,0,"W"],[2,1,0,"s"]]},{"cells":[[1,2,0,"m"],[1,3,0,"r"],[2,3,0,"r"],[2,3,1,"r"],[1,3,1,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[1,1,0,"m"]]}],"order":[0,1,2,3]},{"name":"선인장 화분","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,1,"o"],[2,0,2,"o"],[1,0,2,"o"]],"start":[[1,0,0,"o"],[0,1,0,"o"],[1,1,0,"o"]]},{"cells":[[0,0,2,"o"],[0,0,1,"o"],[0,0,0,"o"]],"start":[[0,0,0,"o"],[0,0,1,"o"],[0,0,2,"o"]]},{"cells":[[1,0,0,"o"],[2,0,0,"o"],[1,0,1,"o"],[1,1,1,"G"]],"start":[[0,0,0,"o"],[0,0,1,"o"],[1,0,1,"o"],[1,1,1,"G"]]},{"cells":[[1,2,1,"G"],[0,2,1,"G"],[0,3,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"],[1,0,1,"G"]]},{"cells":[[1,3,1,"G"],[2,3,1,"G"],[2,4,1,"G"],[1,4,1,"G"],[1,5,1,"p"]],"start":[[0,0,0,"G"],[1,0,0,"G"],[0,0,1,"G"],[1,0,1,"G"],[1,0,2,"p"]]}],"order":[0,1,2,3,4]},{"name":"귤나무","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[2,0,2,"n"],[2,1,2,"n"],[2,2,2,"n"],[2,3,2,"g"],[3,3,2,"g"],[3,4,2,"G"],[3,5,2,"g"],[4,5,2,"G"],[3,4,1,"G"],[2,3,3,"g"],[2,5,2,"G"],[2,5,1,"g"],[2,5,3,"g"],[1,5,3,"G"],[2,5,4,"o"],[4,4,2,"g"],[1,5,4,"g"],[2,6,4,"G"],[4,6,2,"g"]],"start":[[0,0,1,"g"],[2,0,3,"G"],[2,1,0,"g"],[0,1,1,"G"],[1,1,1,"g"],[2,1,1,"G"],[2,1,2,"g"],[3,1,2,"G"],[2,1,3,"o"],[3,1,3,"g"],[1,2,0,"G"],[0,2,1,"g"],[1,2,1,"G"],[1,3,1,"g"],[2,3,1,"g"],[2,3,2,"g"],[2,4,1,"n"],[2,5,1,"n"],[2,6,1,"n"]]},{"cells":[[2,3,1,"o"],[2,4,1,"G"],[2,4,2,"G"],[2,4,3,"g"],[1,4,3,"G"],[1,4,2,"g"],[1,4,1,"g"],[0,4,2,"g"],[1,3,2,"G"],[0,5,2,"G"],[2,4,4,"g"],[0,5,1,"g"],[1,5,2,"G"],[1,6,2,"G"],[0,5,3,"G"],[0,6,2,"G"]],"start":[[1,0,0,"g"],[1,1,0,"g"],[1,1,1,"G"],[2,1,2,"G"],[1,2,0,"G"],[0,2,1,"G"],[1,2,1,"g"],[2,2,1,"G"],[3,2,1,"G"],[1,2,2,"g"],[2,2,2,"G"],[3,2,2,"G"],[0,3,0,"o"],[1,3,0,"G"],[1,3,1,"g"],[2,3,2,"g"]]},{"cells":[[3,4,3,"G"],[3,5,3,"G"],[4,5,3,"g"],[3,6,3,"g"],[3,5,4,"G"],[3,6,2,"G"],[3,6,1,"o"],[2,6,3,"g"],[1,6,3,"o"],[3,5,1,"g"],[3,5,0,"o"],[2,5,0,"o"],[4,5,1,"o"],[2,6,2,"g"],[2,4,0,"g"]],"start":[[1,0,1,"o"],[1,0,2,"G"],[2,0,2,"g"],[1,0,3,"g"],[2,0,3,"g"],[3,0,3,"o"],[1,1,0,"o"],[2,1,0,"o"],[0,1,1,"o"],[1,1,1,"g"],[0,1,3,"g"],[1,1,3,"G"],[1,1,4,"G"],[2,2,0,"g"],[1,2,3,"G"]]},{"cells":[[1,5,0,"g"],[1,5,1,"G"],[1,6,1,"G"],[2,6,1,"g"],[2,6,0,"G"],[2,7,1,"G"],[2,7,2,"g"],[3,7,2,"o"],[2,7,3,"g"],[1,7,2,"G"]],"start":[[1,0,0,"g"],[0,0,1,"G"],[1,0,1,"g"],[2,0,1,"o"],[1,0,2,"G"],[0,1,2,"G"],[1,1,2,"g"],[1,1,3,"G"],[0,2,2,"G"],[0,2,3,"g"]]}],"order":[0,1,2,3]},{"name":"고무 오리","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[3,0,1,"y"],[3,0,0,"y"],[2,0,0,"y"],[2,1,0,"y"],[1,0,0,"y"],[2,1,1,"y"],[1,1,0,"y"]],"start":[[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"],[2,1,0,"y"],[0,1,1,"y"],[1,1,1,"y"],[2,1,1,"y"]]},{"cells":[[0,0,0,"y"],[0,1,0,"y"],[0,0,1,"y"],[0,1,1,"y"],[1,0,1,"y"],[2,0,1,"y"],[1,1,1,"y"]],"start":[[1,0,1,"y"],[1,1,0,"y"],[1,1,1,"y"],[0,2,0,"y"],[1,2,0,"y"],[0,2,1,"y"],[1,2,1,"y"]]},{"cells":[[3,1,1,"y"],[3,1,0,"y"],[3,2,0,"y"],[2,2,0,"y"]],"start":[[1,0,0,"y"],[1,1,0,"y"],[0,1,1,"y"],[1,1,1,"y"]]},{"cells":[[3,2,1,"y"],[3,3,1,"y"],[3,3,0,"k"],[2,3,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"k"],[1,0,1,"y"],[0,1,0,"y"]]},{"cells":[[2,2,1,"y"],[2,3,1,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"]]},{"cells":[[4,3,0,"o"],[4,3,1,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"]]}],"order":[0,1,4,3,2,5]},{"name":"등대","colour":false,"rules":{"support":true,"slide":false},"turn":"any","parts":[{"cells":[[0,0,0,"m"],[0,0,1,"m"],[1,0,0,"m"],[0,0,2,"m"],[1,0,1,"m"],[0,0,3,"m"],[1,0,2,"m"],[1,0,3,"m"],[1,1,2,"r"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"],[0,2,1,"r"],[0,3,0,"m"],[1,3,0,"m"]]},{"cells":[[3,0,2,"m"],[3,0,1,"m"],[3,0,3,"m"],[2,0,1,"m"],[2,0,3,"m"],[2,0,2,"m"],[2,1,2,"r"],[2,2,2,"s"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[0,0,2,"m"],[1,0,2,"m"],[1,1,1,"r"],[1,2,1,"s"]]},{"cells":[[3,0,0,"m"],[2,0,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[1,1,1,"r"],[1,2,1,"s"],[1,3,1,"r"],[2,3,1,"r"],[2,3,2,"r"],[2,1,1,"r"],[2,4,1,"s"],[2,2,1,"s"]],"start":[[1,0,1,"r"],[1,1,0,"r"],[2,1,0,"s"],[3,1,0,"r"],[0,1,1,"s"],[1,1,1,"r"],[2,1,1,"s"],[3,1,1,"r"]]},{"cells":[[1,2,2,"s"],[1,3,2,"r"],[1,4,2,"s"],[1,4,1,"s"],[1,5,1,"y"],[2,5,1,"y"],[2,4,2,"s"]],"start":[[3,0,0,"y"],[2,0,1,"s"],[2,1,0,"s"],[3,1,0,"y"],[0,1,1,"s"],[1,1,1,"r"],[2,1,1,"s"]]},{"cells":[[2,5,2,"y"],[1,5,2,"y"],[1,6,2,"r"],[2,6,2,"r"],[2,6,1,"r"],[1,6,1,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[1,0,1,"y"],[0,1,0,"r"],[1,1,0,"r"],[1,1,1,"y"]]}],"order":[0,1,2,3,4,5]},{"name":"버섯","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,1,"s"],[1,1,1,"s"],[1,2,1,"s"],[1,1,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,2,0,"s"]]},{"cells":[[1,0,2,"s"],[2,0,2,"s"],[2,0,1,"s"],[2,1,1,"s"],[2,1,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"]]},{"cells":[[1,2,2,"s"],[1,3,2,"s"],[2,2,2,"s"],[1,4,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"s"],[2,0,0,"s"],[2,1,0,"s"]]},{"cells":[[2,2,1,"s"],[2,3,1,"s"],[1,3,1,"r"],[1,4,1,"r"]],"start":[[1,0,0,"s"],[2,0,0,"s"],[0,1,0,"r"],[1,1,0,"r"]]},{"cells":[[0,3,3,"s"],[1,3,3,"r"],[2,3,3,"r"],[3,3,3,"s"],[2,3,2,"r"],[3,3,2,"r"]],"start":[[0,0,0,"s"],[0,1,0,"r"],[0,2,0,"r"],[1,2,0,"r"],[0,3,0,"s"],[1,3,0,"r"]]},{"cells":[[3,3,1,"r"],[3,3,0,"s"],[2,3,0,"r"],[1,3,0,"r"],[0,3,0,"s"],[0,3,1,"r"],[0,3,2,"r"]],"start":[[3,0,0,"r"],[0,0,1,"r"],[3,0,1,"r"],[0,0,2,"s"],[1,0,2,"r"],[2,0,2,"r"],[3,0,2,"s"]]},{"cells":[[2,4,2,"r"],[2,4,1,"r"]],"start":[[0,0,0,"r"],[0,0,1,"r"]]}],"order":[0,1,2,3,5,4,6]},{"name":"등대","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,3,"m"],[2,0,2,"m"],[1,0,3,"m"],[3,0,3,"m"],[3,0,2,"m"],[0,0,3,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[0,1,1,"m"],[0,2,0,"m"],[0,3,0,"m"]]},{"cells":[[0,0,1,"m"],[1,0,1,"m"],[1,0,2,"m"],[0,0,2,"m"],[2,0,1,"m"],[0,0,0,"m"]],"start":[[1,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"],[2,2,0,"m"]]},{"cells":[[1,0,0,"m"],[2,0,0,"m"],[3,0,0,"m"],[3,0,1,"m"]],"start":[[1,0,0,"m"],[1,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"]]},{"cells":[[1,1,2,"r"],[1,1,1,"r"],[2,1,1,"r"],[1,2,2,"s"],[1,2,1,"s"],[2,2,2,"s"],[2,2,1,"s"],[2,1,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"]]},{"cells":[[1,3,1,"r"],[2,3,1,"r"],[1,3,2,"r"],[1,4,1,"s"],[2,3,2,"r"],[2,4,1,"s"]],"start":[[1,0,0,"r"],[1,0,1,"r"],[0,1,0,"s"],[1,1,0,"r"],[0,1,1,"s"],[1,1,1,"r"]]},{"cells":[[2,4,2,"s"],[2,5,2,"y"],[2,5,1,"y"],[1,5,1,"y"],[1,6,1,"r"]],"start":[[1,0,0,"r"],[0,1,0,"y"],[1,1,0,"y"],[0,1,1,"y"],[0,2,1,"s"]]},{"cells":[[1,4,2,"s"],[1,5,2,"y"],[1,6,2,"r"],[2,6,2,"r"],[2,6,1,"r"]],"start":[[0,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[1,1,1,"y"],[1,2,1,"s"]]}],"order":[0,2,1,3,4,5,6]},{"name":"로켓","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,3,"r"],[1,0,2,"k"],[1,1,2,"s"],[1,1,3,"r"],[1,2,2,"s"],[1,2,1,"s"]],"start":[[0,0,0,"r"],[1,0,0,"k"],[0,0,1,"r"],[1,0,1,"s"],[1,0,2,"s"],[2,0,2,"s"]]},{"cells":[[0,0,1,"r"],[1,0,1,"k"],[0,1,1,"r"],[1,1,1,"s"],[2,1,1,"s"],[2,2,1,"s"]],"start":[[0,0,1,"r"],[0,0,2,"r"],[0,1,1,"s"],[0,1,2,"k"],[0,2,0,"s"],[0,2,1,"s"]]},{"cells":[[3,0,2,"r"],[3,1,2,"r"],[2,0,2,"k"],[2,0,1,"k"],[2,1,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"k"],[0,0,1,"r"],[1,0,1,"r"],[1,1,0,"k"]]},{"cells":[[2,0,0,"r"],[2,1,0,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"]]},{"cells":[[2,2,2,"s"],[2,3,2,"c"],[1,3,2,"c"],[1,3,1,"c"],[2,4,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"c"],[0,1,1,"c"],[1,1,1,"c"],[0,2,0,"s"]]},{"cells":[[2,3,1,"c"],[2,4,1,"s"],[1,4,1,"s"],[1,4,2,"s"],[1,5,2,"s"],[2,5,2,"s"],[2,6,2,"r"]],"start":[[1,0,0,"c"],[1,0,1,"s"],[0,0,2,"s"],[0,0,3,"r"],[0,1,1,"s"],[1,1,1,"s"],[0,1,2,"s"]]},{"cells":[[1,5,1,"s"],[2,5,1,"s"],[1,6,1,"r"],[1,7,1,"r"]],"start":[[0,0,1,"r"],[0,1,1,"r"],[0,2,0,"s"],[0,2,1,"s"]]}],"order":[0,1,2,3,4,5,6]},{"name":"성탑","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[0,2,1,"m"],[0,0,1,"m"],[1,0,0,"m"],[0,2,2,"m"]],"start":[[1,0,0,"m"],[1,1,0,"m"],[1,1,1,"m"],[1,1,2,"m"],[0,2,1,"m"],[1,2,1,"m"],[0,2,2,"m"],[1,2,2,"m"]]},{"cells":[[2,0,0,"m"],[2,1,0,"m"],[2,1,1,"m"],[2,0,1,"m"],[2,2,0,"m"],[2,2,1,"m"],[2,3,0,"m"],[2,3,1,"m"],[1,1,1,"m"],[2,4,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[0,2,0,"m"],[0,2,1,"m"],[0,3,0,"m"],[0,3,1,"m"],[0,4,1,"m"]]},{"cells":[[1,0,2,"n"],[1,1,2,"m"],[2,1,2,"m"],[0,1,2,"m"],[0,0,2,"m"],[2,2,2,"m"],[1,0,1,"m"],[1,2,2,"m"],[2,0,2,"m"]],"start":[[1,0,0,"m"],[2,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[2,0,1,"n"],[0,0,2,"m"],[1,0,2,"m"],[2,0,2,"m"],[2,1,1,"m"]]},{"cells":[[0,2,0,"m"],[0,3,0,"m"],[1,3,0,"m"],[0,4,0,"m"],[0,3,1,"m"],[1,2,0,"m"],[1,3,1,"m"],[1,2,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[1,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[0,2,0,"m"]]},{"cells":[[2,3,2,"m"],[2,4,2,"m"],[1,3,2,"m"],[0,3,2,"m"],[0,4,2,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[0,2,0,"m"],[0,2,1,"m"]]},{"cells":[[1,4,1,"k"],[1,5,1,"k"],[1,6,1,"k"],[1,6,0,"r"]],"start":[[0,0,0,"k"],[1,0,0,"r"],[0,0,1,"k"],[0,0,2,"k"]]}],"order":[0,1,2,3,4,5]},{"name":"돌다리","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[0,0,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[1,1,1,"m"]]},{"cells":[[5,0,1,"m"],[5,1,1,"m"],[5,2,1,"w"]],"start":[[0,0,0,"w"],[0,1,0,"m"],[0,2,0,"m"]]},{"cells":[[5,0,0,"m"],[5,1,0,"m"],[5,2,0,"w"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"w"]]},{"cells":[[4,1,1,"m"],[4,2,1,"w"],[3,2,1,"w"],[2,2,1,"w"],[3,2,0,"w"],[4,1,0,"m"]],"start":[[0,0,0,"w"],[1,0,0,"w"],[2,0,0,"w"],[1,0,1,"w"],[2,1,0,"m"],[2,1,1,"m"]]},{"cells":[[1,1,1,"m"],[1,2,1,"w"],[0,2,1,"w"],[0,2,0,"w"],[1,2,0,"w"],[0,3,0,"n"]],"start":[[0,0,0,"m"],[1,0,0,"w"],[1,0,1,"w"],[1,1,0,"w"],[1,1,1,"w"],[2,1,1,"n"]]},{"cells":[[2,2,0,"w"],[2,3,0,"n"]],"start":[[0,0,0,"w"],[1,0,0,"n"]]},{"cells":[[4,2,0,"w"],[4,3,0,"n"]],"start":[[0,0,0,"n"],[0,1,0,"w"]]}],"order":[0,1,2,6,3,4,5]},{"name":"파란 자동차","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[4,0,0,"k"],[4,1,0,"b"],[3,1,0,"b"],[3,2,0,"c"],[3,2,1,"b"],[3,1,1,"b"],[2,2,1,"b"],[4,1,1,"b"],[3,3,1,"b"]],"start":[[0,0,2,"b"],[1,0,2,"b"],[0,0,3,"k"],[1,1,0,"b"],[0,1,1,"c"],[1,1,1,"b"],[0,1,2,"b"],[1,1,2,"b"],[1,2,1,"b"]]},{"cells":[[0,0,0,"k"],[0,1,0,"b"],[1,1,0,"b"],[1,2,0,"c"],[1,2,1,"b"],[0,1,1,"b"],[1,3,1,"b"],[2,3,1,"b"]],"start":[[0,0,0,"k"],[1,0,0,"b"],[1,0,1,"b"],[2,0,1,"c"],[1,1,0,"b"],[2,1,1,"b"],[3,1,1,"b"],[3,1,2,"b"]]},{"cells":[[0,0,2,"k"],[0,1,2,"b"],[1,1,2,"b"],[1,1,1,"b"],[1,2,2,"c"],[1,3,2,"b"],[2,1,1,"b"]],"start":[[0,0,1,"k"],[1,1,0,"b"],[2,1,0,"b"],[0,1,1,"b"],[1,1,1,"b"],[1,2,1,"c"],[1,3,1,"b"]]},{"cells":[[4,0,2,"k"],[4,1,2,"b"],[3,1,2,"b"],[3,2,2,"c"],[3,3,2,"b"]],"start":[[0,0,0,"b"],[1,0,0,"c"],[2,0,0,"b"],[2,1,0,"b"],[3,1,0,"k"]]},{"cells":[[2,1,0,"b"],[2,2,0,"c"],[2,3,0,"b"],[3,3,0,"b"],[1,3,0,"b"]],"start":[[0,0,2,"b"],[0,1,0,"b"],[0,1,1,"c"],[0,1,2,"b"],[0,2,2,"b"]]},{"cells":[[2,1,2,"b"],[2,2,2,"c"],[2,3,2,"b"]],"start":[[0,0,0,"b"],[0,0,1,"c"],[0,0,2,"b"]]}],"order":[1,0,2,4,3,5]},{"name":"꽃병 올린 식탁","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,2,"n"],[0,1,2,"n"],[0,2,2,"w"],[0,2,1,"w"]],"start":[[1,0,0,"n"],[1,0,1,"n"],[0,0,2,"w"],[1,0,2,"w"]]},{"cells":[[3,0,0,"n"],[3,1,0,"n"],[3,2,0,"w"],[2,2,0,"w"]],"start":[[0,0,0,"w"],[0,0,1,"w"],[1,0,1,"n"],[2,0,1,"n"]]},{"cells":[[3,0,2,"n"],[3,1,2,"n"],[3,2,2,"w"]],"start":[[0,0,0,"w"],[0,1,0,"n"],[0,2,0,"n"]]},{"cells":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"w"],[1,2,0,"w"],[1,2,1,"w"]],"start":[[0,0,0,"w"],[1,0,0,"w"],[0,0,1,"n"],[0,0,2,"n"],[1,1,0,"w"]]},{"cells":[[3,2,1,"w"],[2,2,1,"w"],[2,3,1,"y"],[1,3,1,"r"]],"start":[[0,0,0,"r"],[0,1,0,"y"],[0,1,1,"w"],[0,2,1,"w"]]},{"cells":[[2,2,2,"w"],[1,2,2,"w"]],"start":[[0,0,0,"w"],[0,1,0,"w"]]}],"order":[0,1,2,4,3,5]},{"name":"생크림 케이크","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,3,"n"],[0,0,3,"n"],[0,0,2,"n"],[0,1,3,"s"],[1,1,3,"s"],[2,1,3,"s"],[2,0,3,"n"],[1,0,2,"n"],[0,1,2,"s"]],"start":[[0,0,1,"n"],[1,0,1,"s"],[0,1,0,"n"],[0,1,1,"n"],[1,1,1,"s"],[0,2,0,"n"],[1,2,0,"s"],[0,2,1,"n"],[1,2,1,"s"]]},{"cells":[[2,0,1,"n"],[2,0,2,"n"],[1,0,1,"n"],[3,0,2,"n"],[1,1,1,"s"],[3,0,1,"n"],[2,1,1,"s"],[3,1,1,"s"]],"start":[[0,0,1,"s"],[1,0,1,"s"],[2,0,1,"s"],[1,1,0,"n"],[2,1,0,"n"],[0,1,1,"n"],[1,1,1,"n"],[2,1,1,"n"]]},{"cells":[[3,0,0,"n"],[3,1,0,"s"],[2,0,0,"n"],[2,1,0,"s"],[1,0,0,"n"],[0,0,0,"n"]],"start":[[0,0,0,"s"],[1,0,0,"n"],[0,0,1,"s"],[1,0,1,"n"],[1,0,2,"n"],[1,0,3,"n"]]},{"cells":[[0,0,1,"n"],[0,1,1,"s"],[0,1,0,"s"],[1,1,0,"s"]],"start":[[1,0,0,"s"],[1,0,1,"s"],[0,1,0,"n"],[1,1,0,"s"]]},{"cells":[[3,0,3,"n"],[3,1,3,"s"],[3,1,2,"s"],[2,1,2,"s"],[2,2,2,"n"],[2,2,1,"n"],[2,3,2,"s"],[2,3,1,"s"],[1,2,1,"n"],[2,4,2,"y"]],"start":[[0,0,3,"s"],[0,0,4,"n"],[1,1,0,"y"],[1,1,1,"s"],[1,1,2,"n"],[0,1,3,"s"],[1,1,3,"s"],[1,2,1,"s"],[1,2,2,"n"],[2,2,2,"n"]]},{"cells":[[1,1,2,"s"],[1,2,2,"n"],[1,3,2,"s"],[1,3,1,"s"],[1,4,1,"r"]],"start":[[0,0,0,"s"],[0,1,0,"n"],[0,2,0,"s"],[0,2,1,"s"],[0,3,1,"r"]]}],"order":[0,1,4,2,3,5]},{"name":"풍차","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,1,"m"],[2,0,0,"m"],[2,1,0,"m"],[3,0,0,"m"],[2,1,1,"m"],[3,1,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"]]},{"cells":[[3,0,1,"m"],[3,1,1,"m"],[3,2,1,"m"],[3,3,1,"m"],[3,3,0,"m"],[3,2,0,"m"],[3,4,1,"r"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"],[1,0,2,"m"],[0,0,3,"m"],[1,0,3,"m"],[0,0,4,"r"]]},{"cells":[[2,1,2,"s"],[2,2,2,"s"],[2,3,2,"W"],[2,4,2,"s"],[2,3,1,"m"],[2,4,1,"r"],[2,5,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"W"],[0,2,1,"m"],[0,3,0,"s"],[0,3,1,"r"],[0,4,0,"s"]]},{"cells":[[2,2,1,"m"],[2,2,0,"m"],[2,3,0,"m"],[2,4,0,"r"],[3,4,0,"r"]],"start":[[0,0,1,"m"],[1,0,1,"m"],[0,1,1,"m"],[0,2,0,"r"],[0,2,1,"r"]]},{"cells":[[0,3,2,"s"],[1,3,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"]]},{"cells":[[4,3,2,"s"],[3,3,2,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"]]}],"order":[0,1,2,3,4,5]},{"name":"선인장 화분","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,2,"o"],[2,0,2,"o"],[0,0,2,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"],[0,2,0,"o"]]},{"cells":[[2,0,1,"o"],[2,0,0,"o"],[1,0,0,"o"]],"start":[[0,0,1,"o"],[0,1,0,"o"],[0,1,1,"o"]]},{"cells":[[0,0,0,"o"],[0,0,1,"o"],[1,0,1,"o"],[1,1,1,"G"]],"start":[[0,0,0,"o"],[1,0,0,"o"],[0,0,1,"o"],[0,1,1,"G"]]},{"cells":[[1,2,1,"G"],[1,3,1,"G"]],"start":[[0,0,0,"G"],[0,1,0,"G"]]},{"cells":[[0,2,1,"G"],[0,3,1,"G"]],"start":[[0,0,0,"G"],[0,1,0,"G"]]},{"cells":[[2,3,1,"G"],[2,4,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"]]},{"cells":[[1,4,1,"G"],[1,5,1,"p"]],"start":[[0,0,0,"p"],[0,0,1,"G"]]}],"order":[1,0,2,3,6,4,5]},{"name":"눈사람","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,2,"s"],[1,1,2,"s"],[2,0,2,"s"],[2,0,1,"s"],[2,0,0,"s"],[1,0,1,"s"]],"start":[[1,0,0,"s"],[1,0,1,"s"],[1,0,2,"s"],[0,1,0,"s"],[1,1,0,"s"],[1,1,1,"s"]]},{"cells":[[1,0,0,"s"],[0,0,0,"s"],[0,0,1,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[0,2,0,"s"],[1,1,1,"s"],[1,2,1,"s"]],"start":[[1,0,0,"s"],[2,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[0,1,0,"s"],[1,1,0,"s"],[2,1,0,"s"],[1,1,1,"s"],[2,1,1,"s"]]},{"cells":[[0,0,2,"s"],[0,1,2,"s"],[0,2,2,"s"],[1,2,2,"s"],[0,3,2,"s"],[1,3,2,"s"],[0,3,3,"k"],[1,3,3,"o"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[2,0,1,"s"],[3,0,1,"s"],[0,1,0,"o"],[0,1,1,"k"]]},{"cells":[[2,1,1,"s"],[2,1,2,"s"],[2,2,1,"s"],[2,3,1,"s"],[2,3,2,"s"],[2,2,2,"s"],[2,4,1,"k"],[2,2,0,"s"],[1,2,0,"s"],[2,1,0,"s"],[2,2,3,"r"]],"start":[[0,0,2,"s"],[1,0,2,"s"],[1,0,3,"s"],[1,1,0,"k"],[1,1,1,"s"],[1,1,2,"s"],[1,1,3,"s"],[1,2,1,"s"],[1,2,2,"s"],[1,2,3,"s"],[1,3,2,"r"]]},{"cells":[[0,2,1,"s"],[0,3,1,"s"],[0,4,1,"k"],[0,3,0,"s"],[1,4,1,"k"],[0,4,0,"k"],[1,5,1,"k"]],"start":[[0,0,1,"k"],[0,0,2,"s"],[1,1,0,"k"],[0,1,1,"k"],[1,1,1,"k"],[0,1,2,"s"],[0,1,3,"s"]]},{"cells":[[2,3,0,"s"],[2,4,0,"k"],[1,3,0,"s"],[1,3,1,"s"],[1,4,0,"k"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"k"],[1,0,1,"k"],[1,1,0,"s"]]},{"cells":[[1,4,2,"k"],[0,4,2,"k"],[2,4,2,"k"]],"start":[[0,0,0,"k"],[0,1,0,"k"],[0,2,0,"k"]]}],"order":[0,3,2,1,4,5,6]},{"name":"로봇","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[3,0,0,"k"],[3,1,0,"l"],[2,1,0,"l"]],"start":[[0,0,0,"l"],[0,1,0,"l"],[0,1,1,"k"]]},{"cells":[[1,0,0,"k"],[1,1,0,"l"],[1,2,0,"l"],[1,3,0,"s"],[1,1,1,"l"]],"start":[[0,0,0,"s"],[0,0,1,"l"],[0,0,2,"l"],[1,0,2,"l"],[0,0,3,"k"]]},{"cells":[[2,1,1,"l"],[3,1,1,"l"],[3,2,1,"l"],[2,2,1,"l"]],"start":[[0,0,0,"l"],[1,0,0,"l"],[0,1,0,"l"],[1,1,0,"l"]]},{"cells":[[4,1,0,"y"],[4,2,0,"l"],[3,2,0,"l"]],"start":[[0,0,0,"l"],[0,1,0,"l"],[0,1,1,"y"]]},{"cells":[[0,1,0,"y"],[0,2,0,"l"]],"start":[[0,0,0,"l"],[0,1,0,"y"]]},{"cells":[[2,2,0,"l"],[2,3,0,"s"],[2,3,1,"s"],[3,3,0,"s"],[2,4,0,"r"]],"start":[[1,0,1,"s"],[1,1,0,"l"],[0,1,1,"s"],[1,1,1,"s"],[1,1,2,"r"]]},{"cells":[[1,2,1,"l"],[1,3,1,"s"],[1,3,2,"c"]],"start":[[0,0,0,"s"],[0,0,1,"c"],[0,1,0,"l"]]},{"cells":[[3,3,1,"s"],[3,3,2,"c"]],"start":[[0,0,0,"c"],[0,0,1,"s"]]}],"order":[0,1,2,3,4,5,6,7]},{"name":"초록 지붕 집","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,1,"s"],[1,1,1,"s"],[1,0,2,"s"],[0,1,1,"c"],[1,1,2,"s"],[2,0,2,"n"]],"start":[[1,0,0,"s"],[1,0,1,"s"],[2,0,1,"c"],[0,1,0,"n"],[1,1,0,"s"],[1,1,1,"s"]]},{"cells":[[3,0,1,"s"],[2,0,1,"s"],[3,1,1,"c"],[3,1,0,"s"],[3,2,1,"G"],[3,3,1,"G"]],"start":[[1,0,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"c"],[1,1,2,"G"],[1,1,3,"G"]]},{"cells":[[1,0,0,"s"],[2,0,0,"s"],[2,1,0,"s"],[1,1,0,"s"],[3,0,0,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[0,1,0,"s"],[0,1,1,"s"],[0,2,0,"s"]]},{"cells":[[0,0,2,"s"],[0,1,2,"s"],[0,2,2,"G"],[0,2,1,"G"],[0,2,0,"G"],[0,3,1,"G"]],"start":[[0,0,1,"G"],[0,0,2,"s"],[0,0,3,"s"],[0,1,0,"G"],[0,1,1,"G"],[0,2,1,"G"]]},{"cells":[[0,0,1,"s"],[0,0,0,"s"],[0,1,0,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"]]},{"cells":[[3,0,2,"s"],[3,1,2,"s"],[3,2,2,"G"],[2,1,2,"s"]],"start":[[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[1,0,2,"G"]]},{"cells":[[2,1,1,"s"],[2,2,1,"G"],[2,2,2,"G"],[2,3,1,"G"],[1,2,1,"G"],[1,3,1,"G"],[1,2,2,"G"]],"start":[[0,0,1,"G"],[1,0,1,"G"],[0,1,0,"G"],[1,1,0,"G"],[0,1,1,"G"],[1,1,1,"G"],[0,1,2,"s"]]},{"cells":[[1,2,0,"G"],[2,2,0,"G"],[3,2,0,"G"],[3,3,0,"m"]],"start":[[0,0,0,"G"],[0,1,0,"G"],[0,2,0,"G"],[0,2,1,"m"]]}],"order":[0,3,1,2,4,6,5,7]},{"name":"버섯","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,1,"s"],[2,0,1,"s"],[2,0,2,"s"],[1,0,2,"s"],[1,1,2,"s"],[1,2,2,"s"],[2,1,2,"s"]],"start":[[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[0,0,2,"s"],[1,0,2,"s"],[0,1,2,"s"],[1,1,2,"s"]]},{"cells":[[2,1,1,"s"],[1,1,1,"s"],[2,2,1,"s"],[2,2,2,"s"],[2,3,1,"s"]],"start":[[1,0,1,"s"],[1,1,0,"s"],[1,1,1,"s"],[0,2,1,"s"],[1,2,1,"s"]]},{"cells":[[1,2,1,"s"],[1,3,1,"l"],[1,3,0,"l"],[1,4,1,"l"],[1,3,2,"s"],[2,3,2,"l"]],"start":[[1,0,0,"l"],[0,1,0,"l"],[1,1,0,"l"],[2,1,0,"s"],[2,1,1,"l"],[1,2,0,"s"]]},{"cells":[[3,3,1,"l"],[3,3,0,"s"],[2,3,0,"l"]],"start":[[0,0,0,"l"],[0,0,1,"s"],[0,1,1,"l"]]},{"cells":[[3,3,3,"s"],[3,3,2,"l"],[2,3,3,"l"],[1,3,3,"l"],[0,3,3,"s"],[0,3,2,"l"]],"start":[[0,0,0,"s"],[0,0,1,"l"],[0,1,0,"l"],[0,2,0,"l"],[0,3,0,"s"],[0,3,1,"l"]]},{"cells":[[0,3,1,"l"],[0,3,0,"s"]],"start":[[0,0,0,"s"],[0,0,1,"l"]]},{"cells":[[2,4,2,"l"],[1,4,2,"l"],[2,4,1,"l"]],"start":[[1,0,0,"l"],[0,1,0,"l"],[1,1,0,"l"]]}],"order":[0,1,2,5,3,4,6]},{"name":"등대","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,2,"m"],[1,0,2,"m"],[2,0,2,"m"],[1,0,1,"m"],[0,0,3,"m"]],"start":[[0,0,1,"m"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"],[0,2,2,"m"]]},{"cells":[[2,0,1,"m"],[2,1,1,"r"],[1,1,1,"r"],[2,2,1,"s"],[2,0,0,"m"],[2,1,2,"r"]],"start":[[1,0,0,"s"],[1,0,1,"r"],[2,0,1,"r"],[0,0,2,"m"],[1,0,2,"m"],[1,1,1,"r"]]},{"cells":[[0,0,1,"m"],[0,0,0,"m"],[1,0,0,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"]]},{"cells":[[2,0,3,"m"],[3,0,3,"m"],[3,0,2,"m"],[1,0,3,"m"],[3,0,1,"m"],[3,0,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"],[0,1,2,"m"],[0,2,2,"m"],[0,3,2,"m"]]},{"cells":[[1,1,2,"r"],[1,2,2,"s"],[2,2,2,"s"],[2,3,2,"r"],[2,4,2,"s"],[2,5,2,"y"],[1,4,2,"s"],[1,5,2,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"s"],[1,0,1,"s"],[0,0,2,"r"],[0,0,3,"s"],[1,0,3,"s"],[1,0,4,"r"]]},{"cells":[[1,2,1,"s"],[1,3,1,"r"],[1,4,1,"s"],[1,3,2,"r"]],"start":[[0,0,0,"s"],[0,0,1,"r"],[1,0,1,"r"],[0,0,2,"s"]]},{"cells":[[2,3,1,"r"],[2,4,1,"s"],[2,5,1,"y"],[2,6,1,"r"],[1,6,1,"r"],[1,5,1,"y"],[1,6,2,"r"],[2,6,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[0,0,1,"y"],[1,0,1,"y"],[1,0,2,"s"],[1,0,3,"r"],[0,1,0,"r"],[1,1,0,"r"]]}],"order":[0,3,1,2,5,6,4]},{"name":"로켓","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,2,"k"],[1,0,1,"k"],[1,1,2,"s"],[1,1,3,"o"],[1,2,2,"s"],[1,0,3,"o"]],"start":[[0,0,0,"k"],[0,1,0,"k"],[1,1,0,"s"],[2,1,0,"s"],[0,2,0,"o"],[1,2,0,"o"]]},{"cells":[[2,0,0,"o"],[2,0,1,"k"],[2,1,1,"s"],[2,0,2,"k"],[2,2,1,"s"],[2,1,0,"o"]],"start":[[0,0,0,"k"],[0,0,1,"k"],[1,0,1,"s"],[2,0,1,"s"],[0,0,2,"o"],[1,0,2,"o"]]},{"cells":[[0,0,1,"o"],[0,1,1,"o"],[1,1,1,"s"],[1,2,1,"s"],[1,3,1,"c"],[2,3,1,"c"]],"start":[[2,0,0,"o"],[1,0,1,"s"],[2,0,1,"o"],[1,0,2,"s"],[0,0,3,"c"],[1,0,3,"c"]]},{"cells":[[3,0,2,"o"],[3,1,2,"o"],[2,1,2,"s"],[2,2,2,"s"],[2,3,2,"c"],[2,4,2,"s"]],"start":[[1,0,0,"s"],[1,0,1,"c"],[1,0,2,"s"],[0,0,3,"o"],[1,0,3,"s"],[0,0,4,"o"]]},{"cells":[[1,3,2,"c"],[1,4,2,"s"],[1,4,1,"s"],[1,5,1,"s"],[1,6,1,"r"],[2,4,1,"s"],[1,7,1,"r"]],"start":[[0,0,1,"c"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[0,2,0,"s"],[0,3,0,"r"],[0,4,0,"r"]]},{"cells":[[1,5,2,"s"],[2,5,2,"s"],[2,5,1,"s"],[2,6,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"s"],[1,0,1,"s"],[1,1,0,"s"]]}],"order":[0,1,2,3,4,5]},{"name":"성탑","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,2,"m"],[0,1,2,"m"],[0,2,2,"m"],[0,1,1,"m"],[1,0,2,"n"],[0,0,1,"m"],[0,2,1,"m"]],"start":[[1,0,0,"m"],[1,0,1,"m"],[1,0,2,"m"],[0,1,0,"n"],[1,1,0,"m"],[1,1,1,"m"],[1,1,2,"m"]]},{"cells":[[2,0,1,"m"],[2,1,1,"m"],[1,1,1,"m"],[1,1,2,"m"]],"start":[[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[1,1,0,"m"]]},{"cells":[[1,0,0,"m"],[1,1,0,"m"],[0,0,0,"m"],[1,2,0,"m"],[0,2,0,"m"],[1,0,1,"m"],[0,1,0,"m"]],"start":[[2,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[2,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[2,1,1,"m"]]},{"cells":[[2,0,0,"m"],[2,1,0,"m"],[2,2,0,"m"],[2,2,1,"m"]],"start":[[2,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[2,0,1,"m"]]},{"cells":[[2,0,2,"m"],[2,1,2,"m"],[2,2,2,"m"],[1,2,2,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,1,0,"m"],[0,2,0,"m"]]},{"cells":[[1,2,1,"m"],[1,3,1,"m"],[1,3,2,"m"],[1,3,0,"m"],[2,3,1,"m"],[2,3,0,"m"],[2,3,2,"m"],[2,4,2,"m"],[2,4,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[1,0,1,"m"],[0,0,2,"m"],[1,0,2,"m"],[1,1,0,"m"],[1,1,1,"m"],[2,1,1,"m"],[1,1,2,"m"]]},{"cells":[[0,3,0,"m"],[0,3,1,"m"],[0,4,0,"m"],[0,3,2,"m"],[0,4,2,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"],[0,1,0,"m"],[0,1,2,"m"]]},{"cells":[[1,4,1,"k"],[1,5,1,"k"],[1,6,1,"k"],[1,6,0,"r"]],"start":[[1,0,0,"k"],[1,1,0,"k"],[0,2,0,"r"],[1,2,0,"k"]]}],"order":[0,1,2,3,6,4,5,7]},{"name":"돌다리","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[5,0,0,"m"],[5,1,0,"m"],[5,1,1,"m"],[4,1,1,"m"],[5,0,1,"m"]],"start":[[1,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"]]},{"cells":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[1,2,0,"w"]],"start":[[1,0,2,"m"],[0,1,0,"w"],[0,1,1,"m"],[1,1,1,"m"],[1,1,2,"m"]]},{"cells":[[0,1,1,"m"],[0,2,1,"w"],[1,1,1,"m"],[1,2,1,"w"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"w"],[1,0,1,"w"]]},{"cells":[[4,1,0,"m"],[4,2,0,"w"],[5,2,0,"w"],[4,3,0,"n"]],"start":[[1,0,0,"w"],[0,0,1,"m"],[1,0,1,"w"],[2,0,1,"n"]]},{"cells":[[4,2,1,"w"],[5,2,1,"w"],[3,2,1,"w"],[2,2,1,"w"],[3,2,0,"w"]],"start":[[1,0,0,"w"],[0,0,1,"w"],[1,0,1,"w"],[1,0,2,"w"],[1,0,3,"w"]]},{"cells":[[2,2,0,"w"],[2,3,0,"n"]],"start":[[0,0,0,"n"],[0,1,0,"w"]]},{"cells":[[0,2,0,"w"],[0,3,0,"n"]],"start":[[0,0,0,"w"],[1,0,0,"n"]]}],"order":[0,3,1,2,4,5,6]},{"name":"노란 택시","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"k"],[0,1,0,"y"],[1,1,0,"y"],[1,2,0,"c"],[2,2,0,"c"],[2,1,0,"y"],[2,2,1,"y"]],"start":[[0,0,1,"k"],[1,0,1,"y"],[1,1,1,"y"],[2,1,1,"c"],[2,2,0,"y"],[1,2,1,"y"],[2,2,1,"c"]]},{"cells":[[4,0,2,"k"],[4,1,2,"y"],[3,1,2,"y"],[3,2,2,"c"],[4,1,1,"y"],[2,2,2,"c"],[3,3,2,"y"]],"start":[[1,0,0,"y"],[0,1,0,"c"],[1,1,0,"c"],[1,2,0,"y"],[2,2,0,"y"],[2,2,1,"y"],[2,3,0,"k"]]},{"cells":[[0,0,2,"k"],[0,1,2,"y"],[0,1,1,"y"],[1,1,2,"y"],[1,1,1,"y"],[2,1,1,"y"],[2,1,2,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[2,0,0,"y"],[2,0,1,"k"],[0,1,0,"y"],[1,1,0,"y"],[2,1,0,"y"]]},{"cells":[[4,0,0,"k"],[4,1,0,"y"],[3,1,0,"y"],[3,1,1,"y"],[3,2,0,"c"],[3,2,1,"y"],[3,3,1,"y"]],"start":[[0,0,1,"k"],[1,1,0,"y"],[0,1,1,"y"],[1,1,1,"y"],[1,2,0,"y"],[1,2,1,"c"],[1,3,0,"y"]]},{"cells":[[1,2,2,"c"],[1,3,2,"y"],[2,3,2,"y"],[2,3,1,"y"],[1,3,1,"y"],[1,3,0,"y"],[1,2,1,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"],[0,0,2,"y"],[0,1,0,"c"],[0,1,1,"y"]]},{"cells":[[3,3,0,"y"],[2,3,0,"y"]],"start":[[0,0,0,"y"],[0,1,0,"y"]]}],"order":[0,3,1,2,4,5]},{"name":"꽃병 올린 식탁","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[3,0,2,"n"],[3,1,2,"n"],[3,2,2,"W"],[3,2,1,"W"]],"start":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"W"],[0,2,1,"W"]]},{"cells":[[0,0,2,"n"],[0,1,2,"n"],[0,2,2,"W"]],"start":[[0,0,0,"n"],[0,0,1,"n"],[0,0,2,"W"]]},{"cells":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"W"],[1,2,0,"W"],[2,2,0,"W"]],"start":[[2,0,0,"n"],[2,0,1,"n"],[0,0,2,"W"],[1,0,2,"W"],[2,0,2,"W"]]},{"cells":[[3,0,0,"n"],[3,1,0,"n"],[3,2,0,"W"]],"start":[[0,0,0,"W"],[0,0,1,"n"],[0,0,2,"n"]]},{"cells":[[2,2,2,"W"],[2,2,1,"W"]],"start":[[0,0,0,"W"],[0,1,0,"W"]]},{"cells":[[0,2,1,"W"],[1,2,1,"W"],[1,2,2,"W"]],"start":[[0,0,0,"W"],[1,0,0,"W"],[0,1,0,"W"]]},{"cells":[[2,3,1,"y"],[1,3,1,"r"]],"start":[[0,0,0,"r"],[1,0,0,"y"]]}],"order":[0,1,2,3,4,5,6]},{"name":"귤나무","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,2,"n"],[2,1,2,"n"],[2,2,2,"n"],[2,3,2,"g"],[1,3,2,"G"],[2,3,3,"g"],[2,4,3,"g"],[2,3,1,"g"],[2,4,4,"g"]],"start":[[0,0,1,"g"],[0,1,1,"g"],[1,1,1,"g"],[1,2,0,"G"],[1,2,1,"g"],[2,2,1,"n"],[3,2,1,"n"],[4,2,1,"n"],[1,3,1,"g"]]},{"cells":[[3,3,2,"G"],[3,4,2,"o"],[3,4,3,"g"],[3,4,1,"G"],[2,4,1,"g"],[3,5,3,"G"],[3,5,2,"g"],[3,5,4,"G"],[4,5,3,"g"]],"start":[[1,0,0,"G"],[0,1,0,"g"],[1,1,0,"G"],[1,1,1,"g"],[1,2,0,"g"],[1,2,1,"o"],[1,2,2,"G"],[1,3,1,"G"],[2,3,1,"g"]]},{"cells":[[1,4,3,"g"],[1,4,2,"G"],[1,5,3,"g"],[1,5,2,"G"],[1,5,4,"G"],[0,5,2,"o"],[0,5,1,"G"],[0,4,2,"g"],[0,5,3,"G"]],"start":[[1,0,1,"G"],[0,0,2,"g"],[1,0,2,"o"],[1,0,3,"G"],[1,1,0,"G"],[0,1,1,"g"],[1,1,1,"g"],[0,1,2,"G"],[1,1,2,"G"]]},{"cells":[[1,4,1,"g"],[1,5,1,"g"],[2,5,1,"G"],[2,5,0,"o"],[2,4,0,"G"],[3,5,1,"g"],[1,6,1,"G"],[3,5,0,"G"],[1,5,0,"o"],[2,6,0,"G"]],"start":[[0,0,0,"G"],[0,0,1,"g"],[1,0,1,"o"],[0,0,2,"g"],[1,1,0,"G"],[0,1,1,"G"],[1,1,1,"o"],[1,1,2,"G"],[0,2,1,"g"],[1,2,1,"G"]]},{"cells":[[2,4,2,"G"],[2,5,2,"G"],[2,5,3,"g"],[2,6,2,"G"],[2,5,4,"g"],[3,6,2,"G"],[2,6,1,"G"],[3,6,1,"g"]],"start":[[2,0,0,"G"],[2,0,1,"g"],[0,1,0,"G"],[1,1,0,"G"],[2,1,0,"G"],[2,1,1,"G"],[1,2,0,"g"],[1,3,0,"g"]]},{"cells":[[4,4,2,"g"],[4,5,2,"G"],[4,5,1,"G"],[4,6,2,"o"]],"start":[[0,0,1,"g"],[0,1,0,"G"],[0,1,1,"G"],[0,2,1,"o"]]},{"cells":[[1,6,2,"G"],[1,6,3,"g"],[2,6,3,"G"],[0,6,2,"G"],[3,6,3,"G"],[1,7,2,"G"],[2,7,2,"g"],[2,6,4,"G"],[2,7,3,"G"],[2,7,1,"g"],[3,7,2,"G"]],"start":[[0,0,2,"G"],[0,1,1,"g"],[0,1,2,"G"],[1,1,2,"G"],[0,2,0,"G"],[0,2,1,"G"],[1,2,1,"G"],[1,2,2,"g"],[1,2,3,"g"],[0,3,1,"G"],[1,3,2,"G"]]}],"order":[0,1,2,3,4,5,6]},{"name":"고무 오리","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"y"],[1,0,0,"y"],[2,0,0,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"],[0,0,2,"y"]]},{"cells":[[3,0,0,"y"],[3,1,0,"y"],[3,0,1,"y"]],"start":[[0,0,1,"y"],[0,1,0,"y"],[0,1,1,"y"]]},{"cells":[[2,0,1,"y"],[1,0,1,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"]]},{"cells":[[0,0,1,"y"],[0,1,1,"y"],[1,1,1,"y"],[2,1,1,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"],[0,0,2,"y"],[1,0,2,"y"]]},{"cells":[[0,1,0,"y"],[1,1,0,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"]]},{"cells":[[2,1,0,"y"],[2,2,0,"y"],[2,2,1,"y"],[3,2,1,"y"],[3,2,0,"y"],[3,1,1,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"],[0,1,0,"y"],[1,1,1,"y"]]},{"cells":[[4,3,1,"o"],[3,3,1,"y"],[4,3,0,"o"],[3,3,0,"k"],[2,3,1,"y"],[2,3,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"k"],[1,0,1,"y"],[0,0,2,"o"],[1,0,2,"o"]]}],"order":[0,1,2,3,4,5,6]},{"name":"등대","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,3,"m"],[0,0,2,"m"],[0,0,1,"m"],[1,0,2,"m"],[1,0,3,"m"],[1,0,1,"m"],[1,1,1,"r"]],"start":[[0,0,1,"r"],[0,1,0,"m"],[1,1,0,"m"],[2,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[2,1,1,"m"]]},{"cells":[[1,0,0,"m"],[2,0,0,"m"],[0,0,0,"m"],[3,0,0,"m"],[2,0,1,"m"],[2,0,2,"m"],[2,1,1,"r"]],"start":[[1,0,0,"m"],[1,0,1,"m"],[1,0,2,"m"],[1,0,3,"m"],[0,1,1,"r"],[1,1,1,"m"],[1,2,1,"m"]]},{"cells":[[3,0,2,"m"],[3,0,3,"m"],[2,0,3,"m"],[3,0,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"]]},{"cells":[[2,1,2,"r"],[2,2,2,"s"],[2,3,2,"r"],[1,3,2,"r"],[1,1,2,"r"],[1,3,1,"r"],[1,2,1,"s"],[1,2,2,"s"]],"start":[[0,0,0,"r"],[1,0,0,"s"],[2,0,0,"r"],[0,0,1,"r"],[1,0,1,"s"],[2,0,1,"r"],[1,1,1,"s"],[2,1,1,"r"]]},{"cells":[[2,2,1,"s"],[2,3,1,"r"],[2,4,1,"s"],[2,4,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[1,1,0,"r"],[2,1,0,"s"]]},{"cells":[[1,4,1,"s"],[1,4,2,"s"],[1,5,2,"y"],[1,6,2,"r"],[1,6,1,"r"],[2,6,2,"r"]],"start":[[2,0,0,"r"],[0,0,1,"s"],[1,0,1,"y"],[2,0,1,"r"],[0,1,1,"s"],[2,1,1,"r"]]},{"cells":[[1,5,1,"y"],[2,5,1,"y"],[2,6,1,"r"],[2,5,2,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"],[1,0,1,"r"],[0,1,1,"y"]]}],"order":[0,1,4,2,3,5,6]},{"name":"눈사람","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,1,"s"],[2,0,1,"s"],[1,0,2,"s"],[1,0,0,"s"],[2,0,2,"s"],[1,1,0,"s"],[0,0,1,"s"],[0,0,2,"s"],[1,1,2,"s"]],"start":[[1,0,1,"s"],[2,0,1,"s"],[0,1,0,"s"],[2,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[1,2,1,"s"],[2,2,1,"s"]]},{"cells":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"s"],[0,1,1,"s"],[1,2,0,"s"],[0,2,1,"s"],[2,2,0,"s"],[1,3,0,"s"]],"start":[[2,0,1,"s"],[2,0,2,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[2,1,2,"s"],[2,1,3,"s"]]},{"cells":[[2,0,0,"s"],[2,1,0,"s"],[2,1,1,"s"],[1,1,1,"s"],[2,1,2,"s"],[1,2,1,"s"],[2,2,1,"s"],[1,3,1,"s"]],"start":[[0,0,2,"s"],[0,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[0,1,2,"s"],[0,2,1,"s"],[1,2,1,"s"],[1,3,1,"s"]]},{"cells":[[0,1,2,"s"],[0,2,2,"s"],[0,3,2,"s"],[1,2,2,"s"],[1,3,2,"s"],[2,3,2,"s"],[0,3,3,"k"],[1,3,3,"o"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[0,0,2,"s"],[1,0,2,"k"],[0,1,1,"s"],[0,1,2,"s"],[1,1,2,"o"],[0,2,2,"s"]]},{"cells":[[2,2,3,"r"],[2,2,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"r"]]},{"cells":[[2,3,0,"s"],[2,4,0,"k"],[1,4,0,"k"],[2,3,1,"s"],[2,4,1,"k"],[1,4,1,"k"],[0,4,1,"k"],[0,4,2,"k"],[1,5,1,"k"]],"start":[[1,0,1,"k"],[0,1,0,"k"],[1,1,0,"k"],[0,1,1,"k"],[1,1,1,"k"],[2,1,1,"k"],[2,1,2,"k"],[0,2,0,"s"],[0,2,1,"s"]]},{"cells":[[0,3,0,"s"],[0,4,0,"k"],[0,3,1,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"k"]]},{"cells":[[1,4,2,"k"],[2,4,2,"k"]],"start":[[0,0,0,"k"],[0,0,1,"k"]]}],"order":[0,1,2,3,4,6,5,7]},{"name":"로봇","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,0,"k"],[1,1,0,"l"],[1,1,1,"l"]],"start":[[0,0,1,"k"],[0,1,0,"l"],[0,1,1,"l"]]},{"cells":[[3,0,0,"k"],[3,1,0,"l"],[3,2,0,"l"],[3,1,1,"l"],[4,2,0,"l"],[4,1,0,"y"]],"start":[[0,0,0,"l"],[1,0,0,"l"],[0,0,1,"l"],[1,0,1,"y"],[0,0,2,"k"],[0,1,1,"l"]]},{"cells":[[2,1,0,"l"],[2,2,0,"l"],[2,3,0,"s"],[2,3,1,"s"],[2,4,0,"r"]],"start":[[0,0,1,"l"],[0,1,1,"l"],[0,2,0,"s"],[0,2,1,"s"],[0,3,1,"r"]]},{"cells":[[0,1,0,"y"],[0,2,0,"l"],[1,2,0,"l"],[1,2,1,"l"],[1,3,0,"s"]],"start":[[1,0,1,"l"],[1,0,2,"y"],[1,1,0,"s"],[0,1,1,"l"],[1,1,1,"l"]]},{"cells":[[2,1,1,"l"],[2,2,1,"l"],[3,2,1,"l"]],"start":[[0,0,0,"l"],[1,0,0,"l"],[0,1,0,"l"]]},{"cells":[[3,3,0,"s"],[3,3,1,"s"],[3,3,2,"c"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"c"]]},{"cells":[[1,3,1,"s"],[1,3,2,"c"]],"start":[[0,0,0,"s"],[1,0,0,"c"]]}],"order":[1,0,5,2,3,4,6]},{"name":"파란 지붕 집","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"w"],[1,0,0,"w"],[2,0,0,"w"],[2,0,1,"w"],[1,1,0,"w"],[0,0,1,"w"]],"start":[[1,0,0,"w"],[1,0,1,"w"],[0,1,1,"w"],[1,1,1,"w"],[1,2,0,"w"],[1,2,1,"w"]]},{"cells":[[1,0,1,"w"],[1,0,2,"w"],[0,0,2,"w"],[2,0,2,"w"],[1,1,2,"w"],[2,0,3,"n"],[1,0,3,"w"],[0,1,2,"w"],[2,1,3,"w"]],"start":[[0,0,0,"w"],[0,0,1,"n"],[1,0,1,"w"],[1,1,0,"w"],[2,1,0,"w"],[0,1,1,"w"],[1,1,1,"w"],[2,1,1,"w"],[1,2,1,"w"]]},{"cells":[[0,0,3,"w"],[0,1,3,"w"],[0,2,3,"b"],[0,2,2,"b"],[0,3,2,"b"],[1,2,3,"b"],[1,2,2,"b"],[2,2,2,"b"],[2,2,3,"b"],[2,2,1,"b"],[1,1,3,"w"],[3,2,3,"b"]],"start":[[1,0,1,"b"],[1,1,1,"b"],[1,1,2,"b"],[0,1,3,"b"],[1,1,3,"b"],[1,2,0,"b"],[1,2,1,"b"],[1,2,2,"b"],[2,2,2,"w"],[1,2,3,"b"],[2,2,3,"w"],[3,2,3,"w"]]},{"cells":[[3,0,0,"w"],[3,0,1,"w"],[3,1,1,"c"],[3,1,2,"w"],[3,1,0,"w"],[3,2,1,"b"],[3,1,3,"w"],[3,0,3,"w"],[3,0,2,"w"]],"start":[[0,0,1,"w"],[0,0,2,"w"],[0,1,0,"b"],[0,1,1,"c"],[0,1,2,"w"],[0,2,1,"w"],[0,2,2,"w"],[0,3,1,"w"],[0,3,2,"w"]]},{"cells":[[0,1,1,"c"],[0,2,1,"b"],[0,1,0,"w"],[1,2,1,"b"],[1,1,1,"w"],[0,2,0,"b"]],"start":[[0,0,0,"c"],[1,0,0,"w"],[0,0,1,"w"],[0,1,0,"b"],[1,1,0,"b"],[0,1,1,"b"]]},{"cells":[[2,1,1,"w"],[2,1,0,"w"],[2,1,2,"w"],[2,2,0,"b"],[3,2,0,"b"],[1,2,0,"b"]],"start":[[1,0,1,"w"],[1,1,1,"w"],[0,2,0,"b"],[0,2,1,"b"],[1,2,1,"w"],[0,2,2,"b"]]},{"cells":[[3,2,2,"b"],[3,3,2,"b"],[3,3,1,"b"],[2,3,2,"b"],[2,3,1,"b"],[3,3,0,"m"],[1,3,2,"b"]],"start":[[0,0,0,"b"],[1,0,0,"b"],[1,0,1,"b"],[1,0,2,"b"],[1,1,0,"b"],[1,1,1,"b"],[1,2,0,"m"]]},{"cells":[[0,3,1,"b"],[1,3,1,"b"]],"start":[[0,0,0,"b"],[0,0,1,"b"]]}],"order":[0,1,2,7,3,4,5,6]},{"name":"버섯","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,2,"s"],[2,0,1,"s"],[1,0,1,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"]]},{"cells":[[1,0,2,"s"],[1,1,2,"s"],[1,2,2,"s"],[1,2,1,"s"]],"start":[[2,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"],[2,1,0,"s"]]},{"cells":[[2,1,1,"s"],[2,1,2,"s"],[2,2,2,"s"],[1,1,1,"s"],[2,2,1,"s"],[2,3,1,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[0,0,2,"s"],[1,0,2,"s"],[0,1,2,"s"]]},{"cells":[[3,3,3,"s"],[2,3,3,"l"],[1,3,3,"l"],[3,3,2,"l"]],"start":[[0,0,0,"s"],[0,0,1,"l"],[0,0,2,"l"],[0,1,0,"l"]]},{"cells":[[1,3,2,"s"],[1,3,1,"l"],[0,3,1,"l"]],"start":[[0,0,0,"s"],[1,0,0,"l"],[1,0,1,"l"]]},{"cells":[[2,3,0,"l"],[3,3,0,"s"],[3,3,1,"l"],[1,3,0,"l"],[0,3,0,"s"]],"start":[[0,0,0,"l"],[1,0,0,"s"],[1,0,1,"l"],[1,0,2,"l"],[1,0,3,"s"]]},{"cells":[[0,3,3,"s"],[0,3,2,"l"]],"start":[[0,0,0,"l"],[0,1,0,"s"]]},{"cells":[[2,3,2,"l"],[2,4,2,"l"],[1,4,2,"l"],[1,4,1,"l"],[2,4,1,"l"]],"start":[[0,0,0,"l"],[1,0,0,"l"],[0,0,1,"l"],[1,0,1,"l"],[1,1,1,"l"]]}],"order":[0,1,2,4,3,7,5,6]},{"name":"등대","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[3,0,0,"m"],[2,0,0,"m"],[2,0,1,"m"],[1,0,1,"m"],[3,0,1,"m"],[3,0,2,"m"],[1,0,0,"m"]],"start":[[0,0,2,"m"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"],[0,2,0,"m"],[0,2,1,"m"],[0,2,2,"m"]]},{"cells":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"],[0,0,3,"m"],[1,0,2,"m"],[1,0,3,"m"],[2,0,3,"m"],[3,0,3,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[2,0,0,"m"],[3,0,0,"m"],[2,1,0,"m"],[3,1,0,"m"],[3,2,0,"m"],[3,3,0,"m"]]},{"cells":[[2,0,2,"m"],[2,1,2,"r"],[1,1,2,"r"],[1,2,2,"s"],[1,3,2,"r"]],"start":[[1,0,0,"r"],[2,0,0,"s"],[3,0,0,"r"],[0,0,1,"m"],[1,0,1,"r"]]},{"cells":[[1,1,1,"r"],[1,2,1,"s"],[2,2,1,"s"],[2,2,2,"s"],[2,1,1,"r"],[2,3,2,"r"],[2,3,1,"r"]],"start":[[1,0,0,"r"],[0,0,1,"s"],[1,0,1,"s"],[0,0,2,"r"],[1,0,2,"r"],[1,1,0,"r"],[1,1,1,"s"]]},{"cells":[[1,3,1,"r"],[1,4,1,"s"],[2,4,1,"s"],[2,4,2,"s"],[2,5,2,"y"],[1,5,1,"y"],[2,6,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"y"],[2,0,0,"s"],[2,0,1,"s"],[1,1,1,"y"],[2,1,1,"s"],[3,1,1,"r"]]},{"cells":[[1,4,2,"s"],[1,5,2,"y"],[1,6,2,"r"],[1,6,1,"r"],[2,6,1,"r"],[2,5,1,"y"]],"start":[[0,0,0,"s"],[0,0,1,"y"],[0,0,2,"r"],[1,1,1,"y"],[0,1,2,"r"],[1,1,2,"r"]]}],"order":[0,1,2,3,4,5]},{"name":"로켓","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,1,"r"],[0,1,1,"r"],[1,1,1,"s"],[1,1,2,"s"],[1,1,3,"r"],[1,2,2,"s"]],"start":[[0,0,1,"r"],[1,0,1,"s"],[2,0,1,"s"],[1,0,2,"s"],[2,1,0,"r"],[2,1,1,"r"]]},{"cells":[[1,0,1,"k"],[2,0,1,"k"],[2,0,0,"r"],[2,1,0,"r"]],"start":[[0,0,0,"k"],[1,0,0,"r"],[1,0,1,"r"],[0,1,0,"k"]]},{"cells":[[2,0,2,"k"],[2,1,2,"s"],[2,1,1,"s"]],"start":[[0,0,0,"k"],[1,0,0,"s"],[1,1,0,"s"]]},{"cells":[[1,0,3,"r"],[1,0,2,"k"]],"start":[[0,0,0,"r"],[1,0,0,"k"]]},{"cells":[[3,0,2,"r"],[3,1,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"]]},{"cells":[[1,2,1,"s"],[2,2,1,"s"],[2,3,1,"c"],[2,2,2,"s"],[1,3,1,"c"],[2,4,1,"s"]],"start":[[0,0,0,"s"],[1,0,0,"c"],[0,0,1,"s"],[1,0,1,"c"],[2,0,1,"s"],[0,1,1,"s"]]},{"cells":[[1,3,2,"c"],[2,3,2,"c"],[2,4,2,"s"],[1,4,2,"s"],[2,5,2,"s"],[1,4,1,"s"],[2,6,2,"r"]],"start":[[0,0,2,"s"],[1,1,0,"r"],[1,1,1,"s"],[0,1,2,"s"],[1,1,2,"s"],[0,1,3,"c"],[1,1,3,"c"]]},{"cells":[[1,5,1,"s"],[1,6,1,"r"],[1,7,1,"r"],[1,5,2,"s"],[2,5,1,"s"]],"start":[[2,0,0,"s"],[0,0,1,"r"],[1,0,1,"r"],[2,0,1,"s"],[2,1,1,"s"]]}],"order":[0,4,1,2,3,5,6,7]},{"name":"성탑","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,0,"m"],[1,1,0,"m"],[1,0,1,"m"],[1,1,1,"m"],[2,0,1,"m"]],"start":[[1,0,0,"m"],[1,0,1,"m"],[1,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"]]},{"cells":[[2,0,0,"m"],[2,1,0,"m"],[2,1,1,"m"],[2,1,2,"m"],[2,2,1,"m"],[1,2,1,"m"]],"start":[[0,0,1,"m"],[1,0,1,"m"],[1,1,0,"m"],[1,1,1,"m"],[1,1,2,"m"],[1,2,2,"m"]]},{"cells":[[0,0,0,"m"],[0,1,0,"m"],[0,2,0,"m"],[0,1,1,"m"],[0,0,1,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"],[0,2,0,"m"],[1,2,0,"m"]]},{"cells":[[0,0,2,"m"],[1,0,2,"n"],[2,0,2,"m"],[1,1,2,"m"]],"start":[[0,0,0,"m"],[0,1,0,"n"],[0,1,1,"m"],[0,2,0,"m"]]},{"cells":[[0,1,2,"m"],[0,2,2,"m"],[0,2,1,"m"],[1,2,2,"m"],[0,3,2,"m"],[0,4,2,"m"],[0,3,1,"m"],[1,3,2,"m"]],"start":[[0,0,1,"m"],[0,0,2,"m"],[0,1,0,"m"],[0,1,1,"m"],[1,1,1,"m"],[0,1,2,"m"],[1,1,2,"m"],[0,1,3,"m"]]},{"cells":[[2,2,0,"m"],[2,3,0,"m"],[1,2,0,"m"],[2,3,1,"m"],[1,3,0,"m"],[0,3,0,"m"],[0,4,0,"m"],[2,4,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[2,0,0,"m"],[1,0,1,"m"],[0,1,0,"m"],[1,1,0,"m"],[1,2,0,"m"],[2,2,0,"m"]]},{"cells":[[2,2,2,"m"],[2,3,2,"m"],[2,4,2,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"]]},{"cells":[[1,3,1,"m"],[1,4,1,"k"],[1,5,1,"k"],[1,6,1,"k"],[1,6,0,"r"]],"start":[[1,0,0,"m"],[1,1,0,"k"],[1,2,0,"k"],[0,3,0,"r"],[1,3,0,"k"]]}],"order":[2,0,1,3,4,7,5,6]},{"name":"생크림 케이크","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,3,"n"],[0,0,3,"n"],[2,0,3,"n"],[0,1,3,"s"],[3,0,3,"n"],[1,0,2,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"n"],[1,2,0,"n"],[0,3,0,"n"],[0,3,1,"s"]]},{"cells":[[1,0,0,"n"],[1,1,0,"s"],[1,0,1,"n"],[0,0,0,"n"],[1,1,1,"s"]],"start":[[0,0,1,"s"],[1,0,1,"s"],[0,1,0,"n"],[0,1,1,"n"],[1,1,1,"n"]]},{"cells":[[2,0,1,"n"],[2,0,2,"n"],[2,1,1,"s"],[2,2,1,"n"],[3,1,1,"s"]],"start":[[1,0,0,"n"],[1,0,1,"s"],[0,0,2,"n"],[1,0,2,"n"],[1,1,1,"s"]]},{"cells":[[3,0,2,"n"],[3,1,2,"s"],[3,1,3,"s"],[3,0,1,"n"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[1,0,1,"n"],[2,0,1,"n"]]},{"cells":[[2,0,0,"n"],[3,0,0,"n"],[3,1,0,"s"],[2,1,0,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[0,1,0,"n"],[0,1,1,"n"]]},{"cells":[[0,0,1,"n"],[0,0,2,"n"],[0,1,1,"s"],[0,1,2,"s"],[0,1,0,"s"],[1,1,2,"s"]],"start":[[0,0,0,"n"],[1,0,0,"s"],[0,0,1,"n"],[1,0,1,"s"],[1,0,2,"s"],[1,1,0,"s"]]},{"cells":[[1,1,3,"s"],[2,1,3,"s"],[2,1,2,"s"],[2,2,2,"n"]],"start":[[1,0,1,"n"],[0,1,0,"s"],[1,1,0,"s"],[1,1,1,"s"]]},{"cells":[[1,2,2,"n"],[1,2,1,"n"],[1,3,1,"s"],[2,3,1,"s"],[2,3,2,"s"],[1,3,2,"s"],[1,4,1,"r"],[2,4,2,"y"]],"start":[[1,0,0,"r"],[0,0,1,"y"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[1,2,0,"n"],[1,2,1,"n"]]}],"order":[1,0,2,3,4,5,6,7]},{"name":"풍차","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,1,"m"],[3,0,1,"m"],[3,0,0,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[0,1,1,"m"]]},{"cells":[[2,0,0,"m"],[2,1,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[3,1,1,"m"],[2,1,1,"m"],[2,2,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[1,1,0,"m"]]},{"cells":[[3,1,0,"m"],[3,2,0,"m"],[3,3,0,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[0,2,0,"m"]]},{"cells":[[2,1,2,"s"],[2,2,2,"s"],[2,3,2,"W"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"W"]]},{"cells":[[2,2,0,"m"],[2,3,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[3,2,1,"m"],[3,3,1,"m"],[3,4,1,"r"],[3,3,2,"s"],[4,3,2,"s"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[0,1,1,"s"],[1,1,1,"s"],[0,2,0,"r"]]},{"cells":[[2,3,1,"m"],[2,4,1,"r"],[2,4,2,"s"],[2,5,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[1,0,1,"r"],[2,0,1,"m"]]},{"cells":[[1,3,2,"s"],[0,3,2,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"]]},{"cells":[[2,4,0,"r"],[3,4,0,"r"]],"start":[[0,0,0,"r"],[0,1,0,"r"]]}],"order":[1,0,2,3,4,5,6,7,8,9]},{"name":"선인장 화분","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,1,"o"],[2,0,2,"o"],[2,0,0,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"],[2,0,0,"o"]]},{"cells":[[0,0,0,"o"],[0,0,1,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"]]},{"cells":[[0,0,2,"o"],[1,0,2,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"]]},{"cells":[[1,0,0,"o"],[1,0,1,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"]]},{"cells":[[1,1,1,"G"],[1,2,1,"G"]],"start":[[0,0,0,"G"],[0,1,0,"G"]]},{"cells":[[0,2,1,"G"],[0,3,1,"G"],[1,3,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"],[1,0,1,"G"]]},{"cells":[[2,3,1,"G"],[2,4,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"G"]]},{"cells":[[1,4,1,"G"],[1,5,1,"p"]],"start":[[0,0,0,"G"],[0,0,1,"p"]]}],"order":[0,3,1,2,4,5,6,7]},{"name":"귤나무","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,2,"n"],[2,1,2,"n"],[2,2,2,"n"],[2,3,2,"G"],[2,3,3,"g"],[2,4,2,"g"],[3,3,2,"G"]],"start":[[1,0,1,"g"],[1,1,0,"g"],[0,1,1,"G"],[1,1,1,"G"],[1,1,2,"n"],[1,1,3,"n"],[1,1,4,"n"]]},{"cells":[[2,3,1,"G"],[2,4,1,"g"],[2,5,1,"o"],[3,5,1,"g"],[3,4,1,"G"],[1,5,1,"G"],[0,5,1,"G"]],"start":[[0,0,1,"G"],[0,0,2,"g"],[0,1,0,"G"],[0,1,1,"g"],[0,1,2,"o"],[0,2,2,"G"],[0,3,2,"G"]]},{"cells":[[1,3,2,"g"],[1,4,2,"g"],[1,4,1,"o"],[1,5,2,"o"],[1,5,3,"g"],[2,5,2,"G"]],"start":[[0,0,0,"g"],[0,0,1,"o"],[1,0,1,"G"],[0,1,1,"g"],[0,1,2,"o"],[0,2,1,"g"]]},{"cells":[[3,4,2,"G"],[3,5,2,"g"],[3,5,3,"o"],[3,4,3,"g"],[2,5,3,"G"],[2,4,3,"g"],[3,6,3,"g"],[1,4,3,"G"]],"start":[[2,0,0,"G"],[1,0,1,"G"],[2,0,1,"g"],[0,0,2,"g"],[1,0,2,"o"],[2,0,2,"g"],[1,1,2,"g"],[2,1,2,"G"]]},{"cells":[[2,4,4,"g"],[2,5,4,"G"],[3,5,4,"g"],[1,5,4,"G"],[2,6,4,"g"],[2,6,3,"o"]],"start":[[1,0,0,"g"],[0,1,0,"g"],[1,1,0,"G"],[2,1,0,"g"],[0,1,1,"o"],[1,2,0,"G"]]},{"cells":[[4,4,2,"g"],[4,5,2,"G"],[4,5,1,"G"],[4,5,3,"g"],[4,6,2,"G"],[3,6,2,"o"],[3,6,1,"g"]],"start":[[1,0,0,"g"],[0,0,1,"G"],[1,0,1,"o"],[0,1,0,"G"],[0,1,1,"G"],[0,1,2,"g"],[0,2,1,"g"]]},{"cells":[[2,4,0,"g"],[2,5,0,"g"],[1,5,0,"g"],[3,5,0,"G"],[2,6,0,"g"]],"start":[[1,0,0,"g"],[0,1,0,"g"],[1,1,0,"g"],[2,1,0,"G"],[1,2,0,"g"]]},{"cells":[[0,4,2,"G"],[0,5,2,"g"],[0,6,2,"G"],[1,6,2,"g"],[1,6,3,"g"],[2,6,2,"g"],[1,6,1,"g"],[2,6,1,"G"],[0,5,3,"G"]],"start":[[1,0,0,"G"],[0,0,1,"g"],[1,0,1,"g"],[2,0,1,"g"],[0,0,2,"G"],[1,0,2,"g"],[1,1,0,"g"],[2,1,0,"G"],[1,2,0,"G"]]},{"cells":[[2,7,3,"G"],[2,7,2,"g"],[3,7,2,"G"],[1,7,2,"g"],[2,7,1,"o"]],"start":[[1,0,0,"g"],[0,1,0,"G"],[1,1,0,"g"],[2,1,0,"o"],[1,2,0,"G"]]}],"order":[0,2,4,1,3,5,6,7,8]},{"name":"고무 오리","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,1,"y"],[0,0,0,"y"],[0,1,0,"y"],[1,1,0,"y"]],"start":[[1,0,0,"y"],[1,0,1,"y"],[0,1,1,"y"],[1,1,1,"y"]]},{"cells":[[1,0,0,"y"],[1,0,1,"y"]],"start":[[0,0,0,"y"],[0,1,0,"y"]]},{"cells":[[2,0,0,"y"],[3,0,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"]]},{"cells":[[2,0,1,"y"],[2,1,1,"y"],[2,1,0,"y"],[3,0,1,"y"]],"start":[[1,0,0,"y"],[1,0,1,"y"],[0,1,1,"y"],[1,1,1,"y"]]},{"cells":[[0,1,1,"y"],[1,1,1,"y"]],"start":[[0,0,0,"y"],[0,1,0,"y"]]},{"cells":[[3,1,1,"y"],[3,2,1,"y"],[3,1,0,"y"],[3,2,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,1,0,"y"],[1,1,0,"y"]]},{"cells":[[2,2,0,"y"],[2,3,0,"y"],[2,3,1,"y"],[2,2,1,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"]]},{"cells":[[4,3,0,"o"],[4,3,1,"o"],[3,3,1,"y"],[3,3,0,"k"]],"start":[[0,0,0,"y"],[0,0,1,"k"],[0,1,0,"o"],[0,1,1,"o"]]}],"order":[0,1,3,4,2,5,6,7]},{"name":"등대","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,0,"m"],[2,0,1,"m"],[2,1,1,"r"],[1,0,0,"m"],[3,0,0,"m"]],"start":[[0,0,1,"m"],[1,0,1,"r"],[0,1,0,"m"],[0,1,1,"m"],[0,1,2,"m"]]},{"cells":[[3,0,2,"m"],[3,0,1,"m"],[3,0,3,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,0,2,"m"]]},{"cells":[[0,0,3,"m"],[0,0,2,"m"],[1,0,3,"m"],[1,0,2,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"]]},{"cells":[[0,0,1,"m"],[1,0,1,"m"],[0,0,0,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"],[1,1,0,"m"]]},{"cells":[[2,0,3,"m"],[2,0,2,"m"],[2,1,2,"r"],[2,2,2,"s"],[2,3,2,"r"]],"start":[[0,0,0,"r"],[0,1,0,"s"],[0,2,0,"r"],[0,3,0,"m"],[0,3,1,"m"]]},{"cells":[[1,1,2,"r"],[1,1,1,"r"],[1,2,2,"s"],[1,2,1,"s"],[2,2,1,"s"]],"start":[[0,0,0,"r"],[0,0,1,"s"],[0,1,0,"r"],[0,1,1,"s"],[1,1,1,"s"]]},{"cells":[[1,3,2,"r"],[1,4,2,"s"],[2,4,2,"s"]],"start":[[1,0,0,"r"],[0,1,0,"s"],[1,1,0,"s"]]},{"cells":[[2,3,1,"r"],[2,4,1,"s"],[1,3,1,"r"]],"start":[[0,0,0,"s"],[0,1,0,"r"],[1,1,0,"r"]]},{"cells":[[1,4,1,"s"],[1,5,1,"y"],[1,5,2,"y"],[1,6,2,"r"],[2,5,2,"y"]],"start":[[0,0,1,"y"],[1,0,1,"y"],[0,0,2,"r"],[0,1,0,"s"],[0,1,1,"y"]]},{"cells":[[2,5,1,"y"],[2,6,1,"r"],[2,6,2,"r"],[1,6,1,"r"]],"start":[[1,0,1,"r"],[1,1,0,"y"],[0,1,1,"r"],[1,1,1,"r"]]}],"order":[0,1,5,2,3,7,4,6,8,9]},{"name":"눈사람","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"s"],[0,0,1,"s"],[0,0,2,"s"],[0,1,0,"s"],[0,1,1,"s"],[1,0,1,"s"],[1,0,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[1,0,2,"s"],[1,1,1,"s"],[1,1,2,"s"]]},{"cells":[[1,0,0,"s"],[2,0,0,"s"],[2,1,0,"s"],[2,2,0,"s"],[2,1,1,"s"],[1,1,0,"s"],[2,3,0,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"s"],[1,2,0,"s"],[0,2,1,"s"],[0,3,0,"s"],[1,3,0,"s"]]},{"cells":[[2,0,2,"s"],[2,0,1,"s"],[2,1,2,"s"],[2,2,2,"s"],[1,1,2,"s"],[1,2,2,"s"],[2,2,1,"s"],[2,2,3,"r"]],"start":[[0,0,1,"s"],[2,0,1,"s"],[1,1,0,"s"],[2,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"],[2,1,1,"s"],[2,2,1,"r"]]},{"cells":[[1,1,1,"s"],[1,2,1,"s"],[1,2,0,"s"],[1,3,1,"s"],[1,4,1,"k"],[1,5,1,"k"]],"start":[[1,0,0,"k"],[1,0,1,"k"],[1,0,2,"s"],[0,0,3,"s"],[1,0,3,"s"],[1,0,4,"s"]]},{"cells":[[0,1,2,"s"],[0,2,2,"s"],[0,2,1,"s"],[0,3,2,"s"],[0,3,1,"s"],[0,3,0,"s"],[0,2,0,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[2,0,0,"s"],[1,0,1,"s"],[2,0,1,"s"],[1,0,2,"s"],[2,0,2,"s"]]},{"cells":[[1,3,3,"o"],[0,3,3,"k"],[1,3,2,"s"],[1,4,2,"k"],[2,4,2,"k"],[2,3,2,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"o"],[1,0,2,"k"],[0,1,0,"k"],[0,1,1,"k"]]},{"cells":[[1,3,0,"s"],[1,4,0,"k"],[0,4,0,"k"],[2,4,0,"k"]],"start":[[0,0,0,"k"],[0,1,0,"k"],[0,1,1,"s"],[0,2,0,"k"]]},{"cells":[[2,3,1,"s"],[2,4,1,"k"]],"start":[[0,0,0,"k"],[1,0,0,"s"]]},{"cells":[[0,4,1,"k"],[0,4,2,"k"]],"start":[[0,0,0,"k"],[0,0,1,"k"]]}],"order":[0,1,2,3,4,5,7,6,8]},{"name":"로봇","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,0,"k"],[1,1,0,"b"]],"start":[[0,0,0,"b"],[0,1,0,"k"]]},{"cells":[[3,0,0,"k"],[3,1,0,"b"]],"start":[[0,0,0,"k"],[0,0,1,"b"]]},{"cells":[[2,1,1,"b"],[3,1,1,"b"]],"start":[[0,0,0,"b"],[0,0,1,"b"]]},{"cells":[[2,1,0,"b"],[2,2,0,"b"],[2,2,1,"b"],[3,2,0,"b"]],"start":[[0,0,0,"b"],[1,0,0,"b"],[0,0,1,"b"],[0,1,0,"b"]]},{"cells":[[1,1,1,"b"],[1,2,1,"b"],[1,3,1,"s"],[1,2,0,"b"],[1,3,2,"c"]],"start":[[2,0,0,"c"],[0,0,1,"b"],[1,0,1,"b"],[2,0,1,"s"],[1,0,2,"b"]]},{"cells":[[0,1,0,"y"],[0,2,0,"b"]],"start":[[0,0,0,"b"],[0,1,0,"y"]]},{"cells":[[4,1,0,"y"],[4,2,0,"b"]],"start":[[0,0,0,"y"],[0,1,0,"b"]]},{"cells":[[3,2,1,"b"],[3,3,1,"s"],[3,3,0,"s"],[3,3,2,"c"]],"start":[[0,0,1,"b"],[0,1,0,"s"],[0,1,1,"s"],[0,1,2,"c"]]},{"cells":[[1,3,0,"s"],[2,3,0,"s"],[2,3,1,"s"],[2,4,0,"r"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"r"],[0,1,1,"s"]]}],"order":[0,3,1,2,4,5,6,7,8]},{"name":"빨간 지붕 집","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,2,"n"],[2,0,1,"p"],[2,1,2,"p"],[1,0,2,"p"]],"start":[[0,0,1,"p"],[0,1,0,"p"],[0,1,1,"n"],[1,1,1,"p"]]},{"cells":[[1,0,0,"p"],[1,1,0,"p"],[0,1,0,"p"],[0,2,0,"r"],[2,0,0,"p"]],"start":[[0,0,0,"r"],[0,1,0,"p"],[0,1,1,"p"],[0,2,1,"p"],[0,2,2,"p"]]},{"cells":[[3,0,2,"p"],[3,0,1,"p"],[3,0,0,"p"],[3,1,0,"p"]],"start":[[1,0,0,"p"],[1,0,1,"p"],[0,0,2,"p"],[1,0,2,"p"]]},{"cells":[[0,0,1,"p"],[0,0,0,"p"],[1,0,1,"p"],[0,1,1,"c"]],"start":[[0,0,0,"p"],[0,1,0,"p"],[1,1,0,"p"],[0,1,1,"c"]]},{"cells":[[0,0,2,"p"],[0,1,2,"p"],[0,2,2,"r"]],"start":[[0,0,0,"r"],[0,0,1,"p"],[0,0,2,"p"]]},{"cells":[[2,1,0,"p"],[2,1,1,"p"],[1,1,1,"p"],[3,1,1,"c"]],"start":[[1,0,0,"p"],[0,1,0,"p"],[1,1,0,"p"],[2,1,0,"c"]]},{"cells":[[1,1,2,"p"],[1,2,2,"r"],[1,2,1,"r"],[2,2,2,"r"]],"start":[[1,0,0,"p"],[0,1,0,"r"],[1,1,0,"r"],[1,1,1,"r"]]},{"cells":[[3,1,2,"p"],[3,2,2,"r"],[3,2,1,"r"],[3,2,0,"r"],[2,2,0,"r"],[1,2,0,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[2,0,0,"r"],[2,0,1,"r"],[2,0,2,"r"],[0,1,0,"p"]]},{"cells":[[2,2,1,"r"],[2,3,1,"r"],[1,3,1,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"],[1,1,0,"r"]]},{"cells":[[0,2,1,"r"],[0,3,1,"r"]],"start":[[0,0,0,"r"],[1,0,0,"r"]]},{"cells":[[3,3,0,"m"],[3,3,1,"r"]],"start":[[0,0,0,"m"],[0,1,0,"r"]]}],"order":[4,0,2,1,3,9,5,6,7,8,10]},{"name":"버섯","colour":true,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,2,"s"],[2,0,1,"s"],[2,1,2,"s"],[1,0,2,"s"]],"start":[[1,0,0,"s"],[0,0,1,"s"],[1,0,1,"s"],[1,1,1,"s"]]},{"cells":[[1,0,1,"s"],[1,1,1,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"]]},{"cells":[[2,1,1,"s"],[2,2,1,"s"],[2,2,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,1,0,"s"]]},{"cells":[[1,1,2,"s"],[1,2,2,"s"],[1,3,2,"s"],[1,4,2,"r"]],"start":[[0,0,0,"r"],[1,0,0,"s"],[2,0,0,"s"],[3,0,0,"s"]]},{"cells":[[1,2,1,"s"],[1,3,1,"r"],[1,4,1,"r"],[2,4,1,"r"],[2,4,2,"r"]],"start":[[1,0,0,"r"],[1,0,1,"r"],[1,0,2,"s"],[0,1,0,"r"],[1,1,0,"r"]]},{"cells":[[3,3,0,"s"],[3,3,1,"r"],[2,3,1,"s"]],"start":[[0,0,0,"r"],[1,0,0,"s"],[0,1,0,"s"]]},{"cells":[[0,3,2,"r"],[0,3,1,"r"],[0,3,0,"s"],[0,3,3,"s"],[1,3,3,"r"]],"start":[[0,0,0,"r"],[0,1,0,"s"],[1,1,0,"r"],[2,1,0,"r"],[3,1,0,"s"]]},{"cells":[[3,3,3,"s"],[3,3,2,"r"],[2,3,3,"r"],[2,3,2,"r"]],"start":[[0,0,0,"r"],[0,0,1,"r"],[0,1,0,"r"],[0,1,1,"s"]]},{"cells":[[1,3,0,"r"],[2,3,0,"r"]],"start":[[0,0,0,"r"],[0,0,1,"r"]]}],"order":[0,3,7,1,2,4,5,6,8]},{"name":"돌다리","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[5,0,0,"m"],[5,0,1,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"]]},{"cells":[[0,0,0,"m"],[0,0,1,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"]]},{"cells":[[0,1,0,"m"],[1,1,0,"m"],[1,2,0,"w"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[1,1,0,"w"]]},{"cells":[[4,1,0,"m"],[4,1,1,"m"],[5,1,0,"m"]],"start":[[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"]]},{"cells":[[1,1,1,"m"],[1,2,1,"w"],[0,1,1,"m"]],"start":[[0,0,0,"w"],[1,0,0,"m"],[1,1,0,"m"]]},{"cells":[[5,1,1,"m"],[5,2,1,"w"]],"start":[[0,0,0,"w"],[1,0,0,"m"]]},{"cells":[[4,2,1,"w"],[3,2,1,"w"],[2,2,1,"w"]],"start":[[0,0,0,"w"],[0,1,0,"w"],[0,2,0,"w"]]},{"cells":[[2,2,0,"w"],[2,3,0,"n"],[3,2,0,"w"]],"start":[[0,0,0,"w"],[0,0,1,"w"],[1,0,1,"n"]]},{"cells":[[4,2,0,"w"],[5,2,0,"w"],[4,3,0,"n"]],"start":[[0,0,0,"n"],[1,0,0,"w"],[1,0,1,"w"]]},{"cells":[[0,2,1,"w"],[0,2,0,"w"],[0,3,0,"n"]],"start":[[1,0,0,"n"],[0,0,1,"w"],[1,0,1,"w"]]}],"order":[0,1,2,3,4,5,9,6,7,8]},{"name":"초록 자동차","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"k"],[0,1,0,"g"],[0,1,1,"g"]],"start":[[0,0,0,"k"],[1,0,0,"g"],[1,0,1,"g"]]},{"cells":[[0,0,2,"k"],[0,1,2,"g"]],"start":[[0,0,0,"g"],[1,0,0,"k"]]},{"cells":[[4,0,0,"k"],[4,1,0,"g"]],"start":[[0,0,0,"k"],[1,0,0,"g"]]},{"cells":[[4,0,2,"k"],[4,1,2,"g"],[3,1,2,"g"],[2,1,2,"g"]],"start":[[0,0,0,"k"],[0,0,1,"g"],[1,0,1,"g"],[2,0,1,"g"]]},{"cells":[[1,1,0,"g"],[1,1,1,"g"],[1,1,2,"g"],[2,1,1,"g"]],"start":[[0,0,0,"g"],[0,0,1,"g"],[1,0,1,"g"],[0,0,2,"g"]]},{"cells":[[2,1,0,"g"],[3,1,0,"g"],[3,2,0,"c"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,1,0,"c"]]},{"cells":[[3,1,1,"g"],[4,1,1,"g"]],"start":[[0,0,0,"g"],[1,0,0,"g"]]},{"cells":[[3,2,2,"c"],[3,3,2,"g"],[2,3,2,"g"],[3,2,1,"g"],[2,2,1,"g"]],"start":[[0,0,0,"g"],[1,0,1,"g"],[0,1,0,"g"],[0,1,1,"c"],[1,1,1,"g"]]},{"cells":[[2,2,0,"c"],[1,2,0,"c"],[2,3,0,"g"],[1,3,0,"g"]],"start":[[0,0,0,"c"],[1,0,0,"c"],[0,1,0,"g"],[1,1,0,"g"]]},{"cells":[[1,2,1,"g"],[1,2,2,"c"],[2,2,2,"c"],[1,3,1,"g"],[1,3,2,"g"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,0,1,"c"],[1,0,1,"g"],[0,1,1,"c"]]},{"cells":[[2,3,1,"g"],[3,3,1,"g"],[3,3,0,"g"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,1,0,"g"]]}],"order":[0,1,2,3,6,4,5,7,8,10,9]},{"name":"꽃병 올린 식탁","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[3,0,2,"n"],[3,1,2,"n"]],"start":[[0,0,0,"n"],[0,0,1,"n"]]},{"cells":[[3,0,0,"n"],[3,1,0,"n"],[3,2,0,"w"]],"start":[[0,0,0,"n"],[0,1,0,"n"],[0,2,0,"w"]]},{"cells":[[0,0,0,"n"],[0,1,0,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"]]},{"cells":[[0,0,2,"n"],[0,1,2,"n"]],"start":[[0,0,0,"n"],[0,1,0,"n"]]},{"cells":[[3,2,2,"w"],[2,2,2,"w"]],"start":[[0,0,0,"w"],[0,0,1,"w"]]},{"cells":[[1,2,0,"w"],[1,2,1,"w"],[1,3,1,"r"],[2,3,1,"y"]],"start":[[1,0,0,"w"],[1,0,1,"w"],[0,1,0,"y"],[1,1,0,"r"]]},{"cells":[[2,2,1,"w"],[2,2,0,"w"],[3,2,1,"w"]],"start":[[1,0,0,"w"],[0,0,1,"w"],[1,0,1,"w"]]},{"cells":[[0,2,2,"w"],[1,2,2,"w"]],"start":[[0,0,0,"w"],[1,0,0,"w"]]},{"cells":[[0,2,1,"w"],[0,2,0,"w"]],"start":[[0,0,0,"w"],[1,0,0,"w"]]}],"order":[0,1,2,3,4,6,5,7,8]},{"name":"딸기 케이크","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,3,"n"],[2,0,2,"n"],[2,1,3,"p"],[2,0,1,"n"]],"start":[[0,0,0,"p"],[0,0,1,"n"],[0,1,1,"n"],[0,2,1,"n"]]},{"cells":[[0,0,2,"n"],[0,0,1,"n"],[0,1,1,"p"]],"start":[[0,0,0,"n"],[0,0,1,"n"],[0,1,1,"p"]]},{"cells":[[1,0,2,"n"],[1,0,1,"n"],[1,1,2,"p"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[0,0,1,"p"]]},{"cells":[[3,0,3,"n"],[3,0,2,"n"],[3,1,3,"p"],[3,0,1,"n"]],"start":[[2,0,0,"p"],[0,0,1,"n"],[1,0,1,"n"],[2,0,1,"n"]]},{"cells":[[0,0,0,"n"],[0,1,0,"p"],[1,0,0,"n"],[1,1,0,"p"]],"start":[[0,0,0,"p"],[1,0,0,"n"],[0,0,1,"p"],[1,0,1,"n"]]},{"cells":[[0,0,3,"n"],[0,1,3,"p"],[1,0,3,"n"],[0,1,2,"p"],[1,1,3,"p"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[0,1,0,"p"],[1,1,0,"p"],[1,1,1,"p"]]},{"cells":[[2,0,0,"n"],[3,0,0,"n"],[2,1,0,"p"],[3,1,0,"p"]],"start":[[0,0,0,"n"],[0,0,1,"p"],[0,1,0,"n"],[0,1,1,"p"]]},{"cells":[[3,1,2,"p"],[3,1,1,"p"],[2,1,2,"p"],[2,1,1,"p"],[2,2,2,"n"]],"start":[[1,0,0,"n"],[0,1,0,"p"],[1,1,0,"p"],[0,1,1,"p"],[1,1,1,"p"]]},{"cells":[[1,1,1,"p"],[1,2,1,"n"],[1,2,2,"n"]],"start":[[0,0,0,"n"],[1,0,0,"n"],[0,1,0,"p"]]},{"cells":[[2,2,1,"n"],[2,3,1,"p"],[2,3,2,"p"],[2,4,2,"y"]],"start":[[0,0,1,"n"],[0,1,0,"p"],[0,1,1,"p"],[0,2,0,"y"]]},{"cells":[[1,3,2,"p"],[1,3,1,"p"],[1,4,1,"r"]],"start":[[1,0,0,"r"],[0,0,1,"p"],[1,0,1,"p"]]}],"order":[0,1,8,6,2,3,4,5,7,9,10]},{"name":"풍차","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,0,"m"],[2,1,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[2,0,1,"m"],[2,1,1,"m"],[2,1,2,"s"],[3,1,1,"m"]],"start":[[1,0,0,"m"],[0,0,1,"m"],[1,0,1,"m"],[1,1,1,"s"]]},{"cells":[[3,0,1,"m"],[3,0,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[3,1,0,"m"],[3,2,0,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[2,2,2,"s"],[2,3,2,"W"],[2,2,1,"m"],[3,3,2,"s"],[4,3,2,"s"]],"start":[[0,0,0,"W"],[1,0,0,"s"],[0,0,1,"s"],[0,0,2,"s"],[1,1,0,"m"]]},{"cells":[[2,2,0,"m"],[2,3,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"]]},{"cells":[[3,2,1,"m"],[3,3,1,"m"]],"start":[[0,0,0,"m"],[0,1,0,"m"]]},{"cells":[[3,3,0,"m"],[3,4,0,"r"]],"start":[[0,0,0,"m"],[0,0,1,"r"]]},{"cells":[[2,3,1,"m"],[2,4,1,"r"],[3,4,1,"r"],[2,4,0,"r"]],"start":[[0,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[0,1,1,"m"]]},{"cells":[[0,3,2,"s"],[1,3,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"]]},{"cells":[[2,4,2,"s"],[2,5,2,"s"]],"start":[[0,0,0,"s"],[0,0,1,"s"]]}],"order":[1,0,2,3,4,5,10,6,9,7,8]},{"name":"선인장 화분","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,0,"o"],[2,0,1,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"]]},{"cells":[[0,0,2,"o"],[0,0,1,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"]]},{"cells":[[2,0,2,"o"],[1,0,2,"o"]],"start":[[0,0,0,"o"],[0,1,0,"o"]]},{"cells":[[1,0,0,"o"],[0,0,0,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"]]},{"cells":[[1,0,1,"o"],[1,1,1,"G"]],"start":[[0,0,0,"o"],[1,0,0,"G"]]},{"cells":[[0,2,1,"G"],[1,2,1,"G"]],"start":[[0,0,0,"G"],[0,0,1,"G"]]},{"cells":[[2,3,1,"G"],[2,4,1,"G"]],"start":[[0,0,0,"G"],[0,1,0,"G"]]},{"cells":[[1,3,1,"G"],[0,3,1,"G"]],"start":[[0,0,0,"G"],[0,0,1,"G"]]},{"cells":[[1,4,1,"G"],[1,5,1,"p"]],"start":[[0,0,0,"p"],[1,0,0,"G"]]}],"order":[0,1,2,3,4,5,7,8,6]},{"name":"귤나무","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[2,0,2,"n"],[2,1,2,"n"],[2,2,2,"n"],[2,3,2,"g"],[2,3,3,"G"]],"start":[[0,0,0,"G"],[1,0,0,"g"],[1,0,1,"n"],[1,0,2,"n"],[1,0,3,"n"]]},{"cells":[[2,3,1,"g"],[2,4,1,"g"],[1,4,1,"o"],[2,4,0,"G"],[1,4,2,"o"],[2,4,2,"G"],[1,5,2,"g"],[1,3,2,"o"]],"start":[[1,0,2,"g"],[0,1,0,"G"],[0,1,1,"g"],[1,1,1,"o"],[0,1,2,"G"],[1,1,2,"o"],[0,2,1,"g"],[1,2,2,"o"]]},{"cells":[[3,3,2,"g"],[3,4,2,"g"],[3,4,1,"g"],[4,4,2,"G"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,0,1,"G"],[0,1,0,"g"]]},{"cells":[[2,4,4,"g"],[2,5,4,"G"],[2,4,3,"g"],[2,6,4,"o"],[1,4,3,"G"]],"start":[[1,0,0,"o"],[1,1,0,"G"],[1,2,0,"g"],[0,2,1,"G"],[1,2,1,"g"]]},{"cells":[[3,4,3,"o"],[3,5,3,"G"],[3,5,4,"G"],[3,6,3,"G"],[2,5,3,"G"],[2,5,2,"g"]],"start":[[0,0,1,"G"],[0,1,0,"G"],[0,1,1,"G"],[1,1,1,"G"],[0,1,2,"o"],[1,2,1,"g"]]},{"cells":[[0,4,2,"G"],[0,5,2,"G"],[0,5,1,"g"],[0,5,3,"o"]],"start":[[0,0,0,"g"],[1,0,0,"G"],[2,0,0,"o"],[1,0,1,"G"]]},{"cells":[[4,5,2,"g"],[4,5,1,"g"],[4,5,3,"G"],[3,5,2,"G"],[3,6,2,"G"],[4,6,2,"g"],[2,6,2,"g"],[3,6,1,"G"],[3,7,2,"o"]],"start":[[1,0,1,"o"],[1,1,0,"g"],[0,1,1,"G"],[1,1,1,"G"],[1,1,2,"g"],[1,2,1,"G"],[0,2,2,"g"],[1,2,2,"g"],[2,2,2,"G"]]},{"cells":[[3,5,1,"G"],[2,5,1,"G"],[3,5,0,"G"],[2,5,0,"g"]],"start":[[0,0,0,"G"],[1,0,0,"G"],[0,0,1,"G"],[1,0,1,"g"]]},{"cells":[[1,5,0,"G"],[1,5,1,"g"],[1,6,1,"G"],[2,6,1,"G"],[2,6,0,"g"],[2,7,1,"G"]],"start":[[0,0,0,"G"],[1,0,0,"g"],[1,0,1,"G"],[0,1,1,"g"],[1,1,1,"G"],[1,1,2,"G"]]},{"cells":[[1,5,3,"g"],[1,5,4,"o"],[1,6,3,"g"],[2,6,3,"o"],[2,7,3,"G"],[2,7,2,"g"]],"start":[[0,0,0,"g"],[0,0,1,"G"],[0,1,1,"o"],[1,1,1,"g"],[1,2,1,"g"],[1,2,2,"o"]]},{"cells":[[0,6,2,"g"],[1,6,2,"g"],[1,7,2,"g"]],"start":[[0,0,0,"g"],[1,0,0,"g"],[0,0,1,"g"]]}],"order":[0,1,2,3,4,5,6,7,8,10,9]},{"name":"고무 오리","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"y"],[0,1,0,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"]]},{"cells":[[0,0,1,"y"],[0,1,1,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"]]},{"cells":[[2,0,0,"y"],[1,0,0,"y"],[2,0,1,"y"]],"start":[[0,0,0,"y"],[0,0,1,"y"],[1,0,1,"y"]]},{"cells":[[1,0,1,"y"],[1,1,1,"y"],[1,1,0,"y"]],"start":[[0,0,1,"y"],[0,1,0,"y"],[0,1,1,"y"]]},{"cells":[[3,0,0,"y"],[3,1,0,"y"],[2,1,0,"y"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,0,1,"y"]]},{"cells":[[3,0,1,"y"],[3,1,1,"y"]],"start":[[0,0,0,"y"],[0,1,0,"y"]]},{"cells":[[2,1,1,"y"],[2,2,1,"y"],[2,3,1,"y"]],"start":[[0,0,0,"y"],[0,1,0,"y"],[0,2,0,"y"]]},{"cells":[[2,2,0,"y"],[2,3,0,"y"],[3,3,0,"k"]],"start":[[0,0,0,"y"],[1,0,0,"y"],[0,1,0,"k"]]},{"cells":[[3,2,0,"y"],[3,2,1,"y"],[3,3,1,"y"]],"start":[[1,0,0,"y"],[0,1,0,"y"],[1,1,0,"y"]]},{"cells":[[4,3,0,"o"],[4,3,1,"o"]],"start":[[0,0,0,"o"],[1,0,0,"o"]]}],"order":[0,5,1,2,3,4,6,8,9,7]},{"name":"등대","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[0,0,0,"m"],[1,0,0,"m"],[1,0,1,"m"],[1,0,2,"m"],[2,0,0,"m"]],"start":[[0,0,0,"m"],[1,0,0,"m"],[2,0,0,"m"],[1,0,1,"m"],[1,0,2,"m"]]},{"cells":[[0,0,1,"m"],[0,0,2,"m"],[0,0,3,"m"],[1,0,3,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"],[0,1,0,"m"],[0,2,0,"m"]]},{"cells":[[3,0,1,"m"],[3,0,2,"m"],[2,0,2,"m"],[3,0,0,"m"]],"start":[[0,0,1,"m"],[0,1,1,"m"],[0,2,0,"m"],[0,2,1,"m"]]},{"cells":[[2,0,3,"m"],[3,0,3,"m"]],"start":[[0,0,0,"m"],[0,0,1,"m"]]},{"cells":[[2,0,1,"m"],[2,1,1,"r"],[1,1,1,"r"],[2,1,2,"r"]],"start":[[1,0,0,"r"],[0,0,1,"r"],[1,0,1,"r"],[1,1,1,"m"]]},{"cells":[[1,1,2,"r"],[1,2,2,"s"],[1,3,2,"r"],[2,2,2,"s"]],"start":[[1,0,0,"s"],[0,0,1,"r"],[1,0,1,"s"],[2,0,1,"r"]]},{"cells":[[2,2,1,"s"],[1,2,1,"s"],[2,3,1,"r"]],"start":[[0,0,0,"s"],[0,0,1,"s"],[1,0,1,"r"]]},{"cells":[[1,3,1,"r"],[1,4,1,"s"]],"start":[[0,0,0,"s"],[0,1,0,"r"]]},{"cells":[[2,3,2,"r"],[2,4,2,"s"]],"start":[[0,0,0,"s"],[0,0,1,"r"]]},{"cells":[[1,4,2,"s"],[1,5,2,"y"],[1,5,1,"y"],[2,5,2,"y"]],"start":[[1,0,0,"s"],[0,0,1,"y"],[1,0,1,"y"],[1,1,1,"y"]]},{"cells":[[2,4,1,"s"],[2,5,1,"y"],[2,6,1,"r"],[1,6,1,"r"]],"start":[[2,0,0,"r"],[0,0,1,"s"],[1,0,1,"y"],[2,0,1,"r"]]},{"cells":[[2,6,2,"r"],[1,6,2,"r"]],"start":[[0,0,0,"r"],[0,1,0,"r"]]}],"order":[0,2,1,3,4,5,6,7,8,9,10,11]},{"name":"눈사람","colour":false,"rules":{"support":true,"slide":true},"turn":"any","parts":[{"cells":[[1,0,2,"s"],[0,0,2,"s"],[0,0,1,"s"],[0,1,2,"s"],[1,1,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"],[1,1,1,"s"]]},{"cells":[[2,0,0,"s"],[2,1,0,"s"],[1,0,0,"s"],[1,0,1,"s"],[2,1,1,"s"],[1,1,0,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[1,0,1,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,1,1,"s"]]},{"cells":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[0,2,0,"s"]]},{"cells":[[2,0,1,"s"],[2,0,2,"s"],[2,1,2,"s"]],"start":[[0,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"]]},{"cells":[[1,1,1,"s"],[1,2,1,"s"],[2,2,1,"s"],[1,2,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"],[0,1,0,"s"]]},{"cells":[[0,1,1,"s"],[0,2,1,"s"],[0,2,2,"s"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,0,1,"s"]]},{"cells":[[2,2,0,"s"],[1,2,0,"s"],[1,3,0,"s"],[2,3,0,"s"],[2,4,0,"k"],[1,4,0,"k"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,1,0,"s"],[1,1,0,"s"],[0,2,0,"k"],[1,2,0,"k"]]},{"cells":[[2,2,3,"r"],[2,2,2,"s"],[2,3,2,"s"],[1,3,2,"s"],[1,3,1,"s"],[0,3,2,"s"]],"start":[[0,0,0,"r"],[0,1,0,"s"],[1,1,0,"s"],[1,1,1,"s"],[1,1,2,"s"],[1,2,1,"s"]]},{"cells":[[0,3,3,"k"],[1,3,3,"o"]],"start":[[0,0,0,"o"],[0,1,0,"k"]]},{"cells":[[0,3,1,"s"],[0,3,0,"s"],[0,4,1,"k"],[0,4,2,"k"],[0,4,0,"k"]],"start":[[0,0,0,"s"],[1,0,0,"s"],[0,1,0,"k"],[1,1,0,"k"],[2,1,0,"k"]]},{"cells":[[2,3,1,"s"],[2,4,1,"k"],[1,4,1,"k"],[1,5,1,"k"]],"start":[[1,0,0,"k"],[2,0,0,"s"],[0,1,0,"k"],[1,1,0,"k"]]},{"cells":[[1,4,2,"k"],[2,4,2,"k"]],"start":[[0,0,0,"k"],[0,1,0,"k"]]}],"order":[0,4,1,2,3,5,6,7,8,9,10,11]}];
+const LEVELS = STAGE_DATA.map((s, i) => {
+  const B = BENCHES[Math.floor(i / PER)], j = i % PER;
+  const teach = j === 0 && B.gim !== 'mix';
+  return { ...s, title: `${i + 1}. ${s.name}`, intro: teach ? B.gim : i === 60 ? 'mix' : null, coach: teach, tip: j === 0 && B.mix ? B.mix : '' };
+});
+const chapterOf = i => Math.floor(i / PER);
+const COACH_TEXT = {
+  build: '반짝이는 대로 따라 해 보세요. 부품을 고르고, 설계도의 노란 칸을 누르고, 끼우기를 눌러요.',
+  yaw: '부품이 돌아가 있어요. 돌리기 버튼으로 방향을 맞춰요.',
+  any: '이번엔 뒤집힌 부품도 있어요. 세우기와 눕히기도 써 봐요.',
+  support: '부품은 바닥이나 이미 붙인 부품에 닿아야 붙어요. 아래부터 끼워요.',
+  plain: '색칠하지 않은 원목 부품이에요. 모양만 보고 자리를 찾아요.',
+  slide: '부품은 바깥에서 곧게 밀어 넣을 틈이 있어야 해요. 안쪽 부품을 먼저 끼워요.',
+};
+const GIMMICKS = {
+  build: { name: '설계도대로 끼우기', text: '아래에서 부품을 골라 설계도의 칸을 누르면 그 자리에 맞춰 보여줘요. 끼우기를 누르면 딱 들어가요. 설계도를 모두 채우면 완성!',
+    art: '<rect x="8" y="34" width="48" height="22" rx="3" fill="#6f9f86"/><path d="M16 34 l16 -10 l16 10" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 3"/><rect x="18" y="38" width="12" height="12" fill="#e2574c" stroke="#2f3a36" stroke-width="1.5"/><rect x="34" y="38" width="12" height="12" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="3 2"/><path d="M40 8 v20 m-5 -5 l5 5 l5 -5" stroke="#2f3a36" stroke-width="2.5" fill="none" stroke-linecap="round"/>' },
+  yaw: { name: '돌려 끼우기', text: '부품이 옆으로 돌아가 있어요. 돌리기 버튼을 누를 때마다 위에서 봤을 때 90°씩 돌아가요.',
+    art: '<rect x="18" y="22" width="28" height="20" rx="2" fill="#5b8fd6" stroke="#2f3a36" stroke-width="2"/><path d="M50 18 a20 20 0 1 1 -12 -8" stroke="#3f9a7a" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M38 4 l2 7 l-7 2" stroke="#3f9a7a" stroke-width="3" fill="none" stroke-linecap="round"/>' },
+  any: { name: '뒤집어 끼우기', text: '세우기는 앞으로, 눕히기는 옆으로 부품을 굴려요. 돌리기와 섞으면 어떤 방향이든 만들 수 있어요.',
+    art: '<rect x="14" y="26" width="14" height="24" rx="2" fill="#f4cf4a" stroke="#2f3a36" stroke-width="2"/><rect x="34" y="36" width="24" height="14" rx="2" fill="#f4cf4a" stroke="#2f3a36" stroke-width="2"/><path d="M22 18 q14 -14 26 12" stroke="#3f9a7a" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M44 24 l4 6 l5 -5" stroke="#3f9a7a" stroke-width="3" fill="none" stroke-linecap="round"/>' },
+  support: { name: '받쳐 붙이기', text: '공중에 뜬 채로는 붙일 수 없어요. 부품이 바닥이나 이미 붙인 부품에 닿아야 해요.',
+    art: '<rect x="8" y="50" width="48" height="6" rx="2" fill="#6f9f86"/><rect x="14" y="38" width="16" height="12" fill="#e8c894" stroke="#2f3a36" stroke-width="2"/><rect x="34" y="14" width="16" height="12" fill="none" stroke="#e2574c" stroke-width="2.5" stroke-dasharray="3 2"/><path d="M42 30 v12" stroke="#e2574c" stroke-width="2.5" stroke-dasharray="2 3"/>' },
+  plain: { name: '원목 키트', text: '부품에 색이 없어요. 설계도도 나무색이에요. 모양만 보고 맞는 자리를 찾아요.',
+    art: '<rect x="12" y="20" width="18" height="18" fill="#dcb27c" stroke="#8f6537" stroke-width="2"/><rect x="30" y="20" width="18" height="18" fill="#dcb27c" stroke="#8f6537" stroke-width="2"/><rect x="30" y="38" width="18" height="18" fill="#dcb27c" stroke="#8f6537" stroke-width="2"/><path d="M16 26 q4 2 8 0 M34 44 q4 2 8 0" stroke="#b98a52" stroke-width="1.5" fill="none"/>' },
+  slide: { name: '끼우는 순서', text: '부품은 바깥에서 곧게 밀어 넣어야 해요. 이미 붙인 부품이 길을 막으면 들어가지 않으니, 안쪽 부품부터 끼워요.',
+    art: '<rect x="10" y="20" width="12" height="30" fill="#a9b0b4" stroke="#2f3a36" stroke-width="2"/><rect x="42" y="20" width="12" height="30" fill="#a9b0b4" stroke="#2f3a36" stroke-width="2"/><rect x="24" y="36" width="16" height="14" fill="#e2574c" stroke="#2f3a36" stroke-width="2"/><path d="M32 6 v24 m-6 -6 l6 6 l6 -6" stroke="#3f9a7a" stroke-width="3" fill="none" stroke-linecap="round"/>' },
+  mix: { name: '큰 작품', text: '여기부터는 배운 규칙이 모두 나오고 부품도 많아져요. 막히면 힌트가 다음 할 일을 알려줘요.',
+    art: '<path d="M10 30 L32 14 L54 30 V54 H10Z" fill="#e8c894" stroke="#8f6537" stroke-width="2"/><rect x="26" y="38" width="12" height="16" fill="#8a5a3c"/><rect x="40" y="16" width="6" height="10" fill="#a9b0b4"/>' },
+};
+const GIMMICK_ORDER = ['build', 'yaw', 'any', 'support', 'plain', 'slide', 'mix'];
+const PAINT = { w: 0xe8c894, W: 0xa8743f, n: 0x8a5a3c, r: 0xe2574c, b: 0x5b8fd6, c: 0x9fdcf0, g: 0x7cc46e, G: 0x4f9a5a, y: 0xf4cf4a, o: 0xf29a3a, k: 0x4a4a52, s: 0xf6f4ee, p: 0xf6a8c0, m: 0xa9b0b4, l: 0xb9a3e8 };
+const RAW = 0xdcb27c;
+const paintOf = (c, colour) => (colour ? PAINT[c] : RAW);
+const hex = n => '#' + n.toString(16).padStart(6, '0');
+
+// ---------- save ----------
+const SAVE_KEY = 'little-workshop:v1';   // shared localStorage on starone99.github.io, so keys carry a game prefix
+function loadSave() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage unavailable: play without records */ }
+  if (!s || typeof s.levels !== 'object') s = { levels: {}, sound: true, seen: {} };
+  if (typeof s.seen !== 'object' || !s.seen) s.seen = {};
+  return s;
+}
+const save = loadSave();
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* storage unavailable */ } }
+const isCleared = i => !!save.levels[i];
+const isOpen = i => i === 0 || isCleared(i - 1);
+const flowersFor = undos => (undos === 0 ? 3 : undos <= 2 ? 2 : 1);
+
+// ---------- sound ----------
+let mode = 'title';
+const Sound = {
+  ctx: null, master: null, noiseBuf: null,
+  ensure() {
+    if (!save.sound) return null;
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(this.ctx.destination);
+      this.noiseBuf = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  },
+  tone(freq, dur, { type = 'sine', gain = 0.12, to = null, delay = 0 } = {}) {
+    if (mode === 'title') return;
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.05);
+  },
+  noise(dur, { freq = 1000, q = 1, gain = 0.1, delay = 0, type = 'bandpass', to = null } = {}) {
+    if (mode === 'title') return;
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = ctx.currentTime + delay, src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  },
+  pick() { this.tone(660, 0.07, { type: 'triangle', gain: 0.07, to: 880 }); },
+  turn() { this.noise(0.08, { freq: 2200, q: 1.4, gain: 0.05 }); this.tone(520, 0.05, { type: 'triangle', gain: 0.04 }); },
+  snap(d = 0) { this.tone(900, 0.05, { type: 'square', gain: 0.03, delay: d }); this.tone(320, 0.12, { type: 'triangle', gain: 0.14, to: 220, delay: d + 0.02 }); this.noise(0.06, { freq: 3000, q: 2, gain: 0.05, delay: d }); },
+  slide(d = 0) { this.noise(0.25, { freq: 1200, q: 0.8, gain: 0.05, delay: d, to: 2400 }); },
+  nope() { this.tone(220, 0.14, { type: 'triangle', gain: 0.08, to: 170 }); },
+  undo() { this.tone(560, 0.1, { type: 'triangle', gain: 0.06, to: 380 }); },
+  chime(d = 0) { [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.7, { gain: 0.07, delay: d + i * 0.11 })); },
+  setOn(on) { save.sound = on; writeSave(); if (this.master) this.master.gain.value = on ? 0.9 : 0; if (on) this.ensure(); },
+};
+
+// ---------- three.js scene ----------
+const canvas = $('#scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 100);
+scene.add(new THREE.HemisphereLight(0xfff6ea, 0xcfc2ad, 0.9));
+const sun = new THREE.DirectionalLight(0xfff0dc, 0.7);
+sun.position.set(4, 11, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 30 });
+sun.shadow.bias = -0.0015;
+scene.add(sun);
+const pivot = new THREE.Group(); scene.add(pivot);
+function mesh(geo, mat, { cast = true, receive = true } = {}) { const m = new THREE.Mesh(geo, mat); m.castShadow = cast; m.receiveShadow = receive; return m; }
+// wood grain shared by every part; painted parts tint it
+const grain = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 26; i++) { g.strokeStyle = `rgba(120,80,40,${0.05 + Math.random() * 0.08})`; g.lineWidth = 1 + Math.random() * 2; g.beginPath(); const y = Math.random() * 128; g.moveTo(0, y); g.bezierCurveTo(40, y + 6, 80, y - 6, 128, y + Math.random() * 4); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); return t;
+})();
+const partMats = new Map();
+const partMat = color => { if (!partMats.has(color)) partMats.set(color, new THREE.MeshLambertMaterial({ color, map: grain })); return partMats.get(color); };
+const cubeGeo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.96, 0.96, 0.96));
+
+// ---------- level state ----------
+let L = null, levelIndex = 0, undos = 0, placed = [], selected = -1, shape = null, preview = null, won = false;
+let blueprint = new Map(), filled = new Set(), bounds = null, SHAPES = [];
+let objs = [], partGroups = new Map(), bpCells = new Map(), previewG = null, glow = null, slides = [];
+let coach = null, hintUntil = 0, viewQ = 0, viewRot = 0, tapCycle = { key: null, n: 0 }, winT = -1;
+function add(o) { pivot.add(o); objs.push(o); return o; }
+function remove(o) { if (!o) return; pivot.remove(o); objs = objs.filter(x => x !== o); }
+let OX = 0, OZ = 0;
+const P = (x, y, z) => new THREE.Vector3(x + OX, y + 0.5, z + OZ);
+
+function buildLevel(i) {
+  for (const o of objs) pivot.remove(o);
+  objs = []; partGroups = new Map(); bpCells = new Map(); previewG = null; glow = null; slides = [];
+  levelIndex = i; L = LEVELS[i];
+  const B = BENCHES[chapterOf(i)];
+  document.documentElement.style.setProperty('--sky-top', B.sky[0]);
+  document.documentElement.style.setProperty('--sky-bot', B.sky[1]);
+  undos = 0; placed = []; selected = -1; won = false; coach = null; hintUntil = 0; preview = null; winT = -1;
+  blueprint = new Map(); filled = new Set();
+  for (const p of L.parts) for (const c of p.cells) blueprint.set(keyC(c), c[3]);
+  const all = L.parts.flatMap(p => p.cells);
+  const W = Math.max(...all.map(c => c[0])) + 1, H = Math.max(...all.map(c => c[1])) + 1, D = Math.max(...all.map(c => c[2])) + 1;
+  bounds = [0, H - 1, 0, W - 1, D - 1];
+  OX = -(W - 1) / 2; OZ = -(D - 1) / 2;
+  SHAPES = L.parts.map(p => normalize(p.start));
+  // workbench: wooden table, green cutting mat with a grid
+  const table = mesh(new THREE.BoxGeometry(Math.max(W, D) + 6, 0.5, Math.max(W, D) + 4.5), new THREE.MeshLambertMaterial({ color: 0xc89b66, map: grain }), { cast: false });
+  table.position.y = -0.27; add(table);
+  const mat = mesh(new THREE.BoxGeometry(W + 1.6, 0.04, D + 1.6), new THREE.MeshLambertMaterial({ color: 0x6f9f86 }), { cast: false });
+  mat.position.y = 0; add(mat);
+  const pts = [];
+  for (let x = 0; x <= W; x++) pts.push(new THREE.Vector3(x - W / 2, 0.025, -D / 2), new THREE.Vector3(x - W / 2, 0.025, D / 2));
+  for (let z = 0; z <= D; z++) pts.push(new THREE.Vector3(-W / 2, 0.025, z - D / 2), new THREE.Vector3(W / 2, 0.025, z - D / 2));
+  add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xdff0e6, transparent: true, opacity: 0.6 })));
+  // a few tools on the table
+  const glue = new THREE.Group();
+  const bottle = mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.6, 16), new THREE.MeshLambertMaterial({ color: 0xf6f4ee })); bottle.position.y = 0.3; glue.add(bottle);
+  const cap = mesh(new THREE.ConeGeometry(0.14, 0.25, 12), new THREE.MeshLambertMaterial({ color: 0xe2574c })); cap.position.y = 0.72; glue.add(cap);
+  glue.position.set(W / 2 + 1.4, 0, -D / 2 - 0.3); add(glue);
+  const ruler = mesh(new THREE.BoxGeometry(2.4, 0.03, 0.35), new THREE.MeshLambertMaterial({ color: 0xf4cf4a })); ruler.position.set(-W / 2 - 0.6, 0.02, D / 2 + 1.1); ruler.rotation.y = 0.25; add(ruler);
+  // blueprint cells: see-through boxes in the target colour, tappable
+  for (const [k, col] of blueprint) {
+    const [x, y, z] = k.split(',').map(Number);
+    const g = new THREE.Group(); g.position.copy(P(x, y, z));
+    const fill = new THREE.Mesh(cubeGeo, new THREE.MeshBasicMaterial({ color: paintOf(col, L.colour), transparent: true, opacity: 0.24, depthWrite: false }));
+    fill.userData.key = k; g.add(fill);
+    const e = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 }));
+    g.add(e); add(g); bpCells.set(k, g);
+  }
+  viewQ = 0; viewRot = 0; pivot.rotation.y = 0;
+  fitCamera();
+  renderTray();
+  updateHUD();
+}
+function partGroup(cells, colour) {
+  const g = new THREE.Group();
+  for (const [x, y, z, c] of cells) {
+    const m = mesh(cubeGeo, partMat(paintOf(c, colour))); m.position.copy(P(x, y, z)); g.add(m);
+    const e = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0x5a4632, transparent: true, opacity: 0.35 })); e.position.copy(m.position); g.add(e);
+  }
+  return g;
+}
+
+// ---------- parts ----------
+function selectPart(k) {
+  if (k < 0 || placed.some(p => p.k === k)) { selected = -1; preview = null; drawPreview(); renderTray(); return; }
+  selected = k; shape = SHAPES[k]; preview = null; tapCycle = { key: null, n: 0 };
+  Sound.pick();
+  renderTray(); drawPreview(); setNote('설계도에서 이 부품이 들어갈 칸을 눌러요'); updateCoach();
+}
+function turn(name) {
+  if (selected < 0 || won) return;
+  SHAPES[selected] = shape = TURNS[name](shape);
+  Sound.turn();
+  // keep the same spot if the turned part still fits around it
+  if (preview) { const again = placementsCovering(shape, preview.at, blueprint, filled, L.colour); preview = again.length ? { at: preview.at, cells: again[0] } : null; }
+  renderTray(); drawPreview(); updateCoach();
+}
+function tapCell(k) {
+  if (selected < 0) { setNote('먼저 아래에서 부품을 골라요', true); return; }
+  const at = k.split(',').map(Number);
+  const options = placementsCovering(shape, at, blueprint, filled, L.colour);
+  if (!options.length) {
+    preview = null; drawPreview();
+    // would another orientation fit here? say so, kindly
+    let fits = false, s = shape;
+    for (let i = 0; i < 24 && !fits; i++) { s = TURNS[['yaw', 'pitch', 'roll'][i % 3]](s); fits = placementsCovering(s, at, blueprint, filled, L.colour).length > 0; }
+    setNote(fits ? '이 방향으로는 안 맞아요. 돌려 보세요' : '이 부품은 여기에 안 맞아요. 다른 칸을 눌러 보세요', true);
+    Sound.nope();
+    return;
+  }
+  tapCycle = tapCycle.key === k ? { key: k, n: tapCycle.n + 1 } : { key: k, n: 0 };
+  preview = { at, cells: options[tapCycle.n % options.length] };
+  drawPreview();
+  updateCoach();
+}
+function drawPreview() {
+  remove(previewG); previewG = null;
+  $('#placeBtn').disabled = !preview || won;
+  if (!preview || mode !== 'play') return;
+  const why = ruleBlock(preview.cells, filled, L.rules, bounds);
+  previewG = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: why ? 0xe3584b : 0x3fbf7f, transparent: true, opacity: 0.55, depthWrite: false, depthTest: false });
+  for (const c of preview.cells) {
+    const m = new THREE.Mesh(cubeGeo, mat); m.position.copy(P(c[0], c[1], c[2])); m.renderOrder = 5; previewG.add(m);
+    const e = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: why ? 0x9c2b22 : 0x1f4b38, depthTest: false })); e.position.copy(m.position); e.renderOrder = 6; previewG.add(e);
+  }
+  add(previewG);
+  const options = placementsCovering(shape, preview.at, blueprint, filled, L.colour).length;
+  if (why === 'float') setNote('공중에 떠 있어요. 바닥이나 붙인 부품에 닿는 자리부터 끼워요', true);
+  else if (why === 'stuck') setNote('밀어 넣을 틈이 없어요. 안쪽 부품을 먼저 끼워요', true);
+  else setNote(options > 1 ? `여기에 맞아요. 같은 칸을 다시 누르면 다른 자리도 볼 수 있어요 (${tapCycle.n % options + 1}/${options})` : '여기에 딱 맞아요. 끼우기를 눌러요');
+  $('#placeBtn').disabled = !!why;
+}
+function setNote(text, warn) { const n = $('#dockNote'); n.textContent = text; n.classList.toggle('warn', !!warn); n.style.color = warn ? 'var(--warn)' : ''; }
+function place() {
+  if (selected < 0 || !preview || won) { Sound.nope(); return; }
+  const why = ruleBlock(preview.cells, filled, L.rules, bounds);
+  if (why) { Sound.nope(); return; }
+  const k = selected, cells = preview.cells;
+  const dir = canSlideIn(cells, filled, bounds) || [0, 1, 0];
+  for (const c of cells) { filled.add(keyC(c)); bpCells.get(keyC(c)).visible = false; }
+  const g = partGroup(cells, L.colour); add(g); partGroups.set(k, g);
+  placed.push({ k, cells });
+  // slide in along the free direction
+  g.position.set(dir[0] * 2.2, dir[1] * 2.2, dir[2] * 2.2); slides.push({ g, from: g.position.clone(), t: 0 });
+  Sound.slide(); Sound.snap(0.22);
+  preview = null; drawPreview();
+  if (filled.size === blueprint.size) { won = true; selected = -1; renderTray(); finish(); return; }
+  const next = L.parts.findIndex((_, i) => !placed.some(p => p.k === i));
+  selectPart(next);
+  updateHUD();
+}
+function undo() {
+  if (won || !placed.length) return;
+  const { k, cells } = placed.pop();
+  for (const c of cells) { filled.delete(keyC(c)); bpCells.get(keyC(c)).visible = true; }
+  remove(partGroups.get(k)); partGroups.delete(k);
+  undos++; Sound.undo();
+  selectPart(k); updateHUD();
+}
+function finish() {
+  Sound.chime(0.35);
+  winT = 0;
+  setTimeout(() => { if (mode === 'play' && won) showClear(); }, 2300);
+  updateHUD(); updateCoach();
+}
+
+// iso drawing of a part for the tray, turned to match the current view
+function partSVG(cs, view) {
+  const turned = cs.map(([x, y, z, c]) => { let p = [x, y, z]; for (let i = 0; i < ((view % 4) + 4) % 4; i++) p = [p[2], p[1], -p[0]]; return [...p, c]; });
+  const n = normalize(turned);
+  const s = 11, iso = ([x, y, z]) => [(x - z) * s * 0.87, (x + z) * s * 0.5 - y * s];
+  const shade = (h, f) => { const ch = sh => Math.max(0, Math.min(255, Math.round(((h >> sh) & 255) * f))); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+  const order = n.slice().sort((a, b) => (a[0] + a[2]) - (b[0] + b[2]) || a[1] - b[1]);
+  let out = '', minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (const [x, y, z, c] of order) {
+    const col = paintOf(c, L.colour);
+    const Pp = (dx, dy, dz) => iso([x + dx, y + dy, z + dz]);
+    const faces = [[[Pp(0, 1, 1), Pp(1, 1, 1), Pp(1, 0, 1), Pp(0, 0, 1)], 0.78], [[Pp(1, 1, 0), Pp(1, 1, 1), Pp(1, 0, 1), Pp(1, 0, 0)], 0.9], [[Pp(0, 1, 0), Pp(1, 1, 0), Pp(1, 1, 1), Pp(0, 1, 1)], 1.08]];
+    for (const [poly, f] of faces) {
+      out += `<polygon points="${poly.map(p => p.join(',')).join(' ')}" fill="${shade(col, f)}" stroke="#4a3a2a" stroke-width="1" stroke-linejoin="round"/>`;
+      for (const [px, py] of poly) { minx = Math.min(minx, px); maxx = Math.max(maxx, px); miny = Math.min(miny, py); maxy = Math.max(maxy, py); }
+    }
+  }
+  return `<svg viewBox="${minx - 2} ${miny - 2} ${maxx - minx + 4} ${maxy - miny + 4}" aria-hidden="true">${out}</svg>`;
+}
+function renderTray() {
+  $('#tray').replaceChildren(...L.parts.map((p, k) => {
+    if (placed.some(x => x.k === k)) return null;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'item'; b.dataset.k = k;
+    b.setAttribute('aria-pressed', String(k === selected));
+    b.setAttribute('aria-label', `부품 ${k + 1}, 조각 ${p.cells.length}개`);
+    b.innerHTML = partSVG(SHAPES[k], -viewQ);
+    b.addEventListener('click', () => { Sound.ensure(); selectPart(k); });
+    return b;
+  }).filter(Boolean));
+}
+
+// ---------- coach and hint: follow the stored order while the build still matches it ----------
+const sameKind = (a, b) => shapeKey(a, L.colour) === shapeKey(b, L.colour);
+function nextStep() {
+  // a placed part must sit exactly where some interchangeable part belongs
+  const solutionSpots = L.parts.map(p => new Set(p.cells.map(keyC)));
+  const used = new Set();
+  for (const pl of placed) {
+    const keys = pl.cells.map(keyC);
+    const spot = L.parts.findIndex((p, i) => !used.has(i) && keys.length === p.cells.length && keys.every(k => solutionSpots[i].has(k)) && sameKind(p.cells, pl.cells));
+    if (spot < 0) return { kind: 'undo' };
+    used.add(spot);
+  }
+  const target = L.order.find(i => !used.has(i));
+  if (target === undefined) return null;
+  const want = L.parts[target].cells;
+  // any unplaced tray part of the same kind will do; prefer the selected one
+  const free = L.parts.map((_, k) => k).filter(k => !placed.some(p => p.k === k) && sameKind(L.parts[k].cells, want));
+  if (!free.length) return { kind: 'undo' };
+  const k = free.includes(selected) ? selected : free[0];
+  if (selected !== k) return { kind: 'select', k };
+  const turns = turnsBetween(shape, want, L.colour);
+  if (turns && turns.length) return { kind: 'turn', name: turns[0] };
+  const wantKeys = new Set(want.map(keyC));
+  if (!preview || preview.cells.length !== want.length || !preview.cells.every(c => wantKeys.has(keyC(c)))) return { kind: 'tap', cells: want };
+  return { kind: 'place' };
+}
+function updateCoach() {
+  document.querySelectorAll('.coach').forEach(e => e.classList.remove('coach'));
+  remove(glow); glow = null; coach = null;
+  if (mode !== 'play' || won) return;
+  if (!L.coach && performance.now() > hintUntil) return;
+  coach = nextStep();
+  if (!coach) return;
+  const say = {
+    undo: '설계도와 다르게 끼운 부품이 있어요. 되돌리기를 눌러 보세요.',
+    select: '반짝이는 부품을 골라 보세요.',
+    turn: `${{ yaw: '돌리기', pitch: '세우기', roll: '눕히기' }[coach.name]} 버튼으로 방향을 맞춰요.`,
+    tap: '설계도의 노란 칸 아무 곳이나 눌러요.',
+    place: '좋아요! 끼우기를 눌러요.',
+  }[coach.kind];
+  if (L.coach) setTip(say); else toast(say);
+  if (coach.kind === 'undo') $('#undoBtn').classList.add('coach');
+  if (coach.kind === 'select') { const el = document.querySelector(`.item[data-k="${coach.k}"]`); if (el) { el.classList.add('coach'); el.scrollIntoView({ block: 'nearest', inline: 'center' }); } }
+  if (coach.kind === 'turn') document.querySelector(`[data-turn="${coach.name}"]`).classList.add('coach');
+  if (coach.kind === 'place') $('#placeBtn').classList.add('coach');
+  if (coach.kind === 'tap') {
+    glow = new THREE.Group();
+    const m = new THREE.MeshBasicMaterial({ color: 0xffc83d, transparent: true, opacity: 0.45, depthWrite: false, depthTest: false });
+    for (const c of coach.cells) { const b = new THREE.Mesh(cubeGeo, m); b.position.copy(P(c[0], c[1], c[2])); b.renderOrder = 4; glow.add(b); }
+    add(glow);
+  }
+}
+$('#hintBtn').addEventListener('click', () => { if (mode !== 'play' || won) return; hintUntil = performance.now() + 5000; updateCoach(); setTimeout(updateCoach, 5100); });
+
+// ---------- camera ----------
+function fitCamera() {
+  const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
+  renderer.setSize(w, h, false);
+  const dockH = $('#dock').hidden ? 0 : $('#dock').offsetHeight;
+  document.documentElement.style.setProperty('--dock-h', `${dockH}px`);
+  const W = bounds ? bounds[3] + 1 : 4, D = bounds ? bounds[4] + 1 : 4, H = bounds ? bounds[1] + 1 : 4;
+  const span = Math.hypot(W, D) + 2.6, tall = (W + D) * 0.4 + H * 0.85 + 2.4;
+  const usable = Math.max(0.35, 1 - (dockH + 150) / h);
+  const fh = Math.max(tall / usable, span / aspect);
+  camera.left = -fh * aspect / 2; camera.right = fh * aspect / 2; camera.top = fh / 2; camera.bottom = -fh / 2;
+  camera.updateProjectionMatrix();
+  const shift = ((dockH - 150) / h) * fh * 0.5;
+  camera.position.set(10, 9 + H * 0.3, 10);
+  camera.lookAt(0, H * 0.4 - shift * 0.9, 0);
+}
+window.addEventListener('resize', fitCamera);
+
+// ---------- input ----------
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function cellAt(e) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const targets = [...bpCells.values()].filter(g => g.visible).map(g => g.children[0]);
+  const hit = ray.intersectObjects(targets, false)[0];
+  return hit ? hit.object.userData.key : null;
+}
+let drag = null;
+canvas.addEventListener('pointerdown', e => { Sound.ensure(); if (mode !== 'play') return; canvas.setPointerCapture(e.pointerId); drag = { x: e.clientX, rot: viewRot, moved: false }; });
+canvas.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x; if (drag.moved || Math.abs(dx) > 8) { drag.moved = true; viewRot = drag.rot + dx * 0.01; } });
+canvas.addEventListener('pointerup', e => {
+  if (!drag) return;
+  if (drag.moved) { viewQ = Math.round(viewRot / (Math.PI / 2)); renderTray(); }
+  else { const k = cellAt(e); if (k && !won) tapCell(k); }
+  drag = null;
+});
+canvas.addEventListener('pointercancel', () => { drag = null; });
+function turnView(d) { viewQ += d; renderTray(); }
+$('#viewL').addEventListener('click', () => turnView(-1));
+$('#viewR').addEventListener('click', () => turnView(1));
+document.querySelectorAll('[data-turn]').forEach(b => b.addEventListener('click', () => turn(b.dataset.turn)));
+$('#placeBtn').addEventListener('click', place);
+$('#undoBtn').addEventListener('click', undo);
+$('#resetBtn').addEventListener('click', () => startLevel(levelIndex, true));
+document.addEventListener('keydown', e => {
+  if (mode !== 'play') return;
+  if (e.code === 'KeyQ') turn('yaw'); if (e.code === 'KeyW') turn('pitch'); if (e.code === 'KeyE') turn('roll');
+  if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); place(); }
+  if (e.code === 'KeyZ' || e.code === 'Backspace') undo();
+  if (e.code === 'ArrowLeft') turnView(-1); if (e.code === 'ArrowRight') turnView(1);
+  if (e.code === 'Tab') { e.preventDefault(); const left = L.parts.map((_, k) => k).filter(k => !placed.some(p => p.k === k)); if (left.length) selectPart(left[(left.indexOf(selected) + 1) % left.length]); }
+});
+
+// ---------- UI ----------
+let toastTimer = 0;
+function toast(text) { const t = $('#toast'); t.textContent = text; t.hidden = false; t.style.animation = 'none'; void t.offsetWidth; t.style.animation = ''; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600); }
+let tipOpen = false;
+function setTip(text) { $('#tipText').textContent = text; tipOpen = true; $('#tip').hidden = mode !== 'play'; }
+function hideTip() { tipOpen = false; $('#tip').hidden = true; }
+$('#tip').addEventListener('click', hideTip);
+function updateHUD() {
+  if (!L || !(mode === 'play' || mode === 'clear' || mode === 'intro')) return;
+  $('#stageTitle').textContent = L.title;
+  $('#moveLabel').textContent = `되돌리기 ${undos}번 · 부품 ${placed.length}/${L.parts.length}`;
+  const left = blueprint.size - filled.size;
+  const chips = [`<span class="goal ${left === 0 ? 'done' : ''}"><i style="background:#6f9f86"></i>${left === 0 ? '완성!' : `빈 칸 ${left}개`}</span>`];
+  if (!L.colour) chips.push('<span class="goal"><i style="background:#dcb27c"></i>원목 · 색 힌트 없음</span>');
+  if (L.rules.support) chips.push('<span class="goal"><i style="background:#8f6537"></i>받쳐 붙이기</span>');
+  if (L.rules.slide) chips.push('<span class="goal"><i style="background:#a9b0b4"></i>밀어 넣기</span>');
+  $('#goals').innerHTML = chips.join('');
+  $('#undoBtn').disabled = !placed.length || won;
+}
+function renderSound() { $('#soundBtn').setAttribute('aria-label', save.sound ? '소리 끄기' : '소리 켜기'); $('#soundIcon').innerHTML = save.sound ? '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>' : '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>'; }
+$('#soundBtn').addEventListener('click', () => { Sound.setOn(!save.sound); renderSound(); });
+function flowerIcons(n, total = 3, cls = '') { let s = ''; for (let i = 0; i < total; i++) s += `<svg class="${i < n ? 'f-on ' + cls : 'f-off'}" style="animation-delay:${i * 0.15}s" aria-hidden="true"><use href="#flower"/></svg>`; return s; }
+function totals() { const recs = Object.values(save.levels); return { done: recs.length, fl: recs.reduce((s, r) => s + r.flowers, 0) }; }
+function progressText() { const t = totals(); return t.done ? `작품 ${t.done}/${LEVELS.length} · 꽃 ${t.fl}/${LEVELS.length * 3}` : '기록은 이 브라우저에 저장돼요'; }
+function showScreen(name) {
+  mode = name;
+  for (const id of ['title', 'select', 'clear', 'intro', 'dex']) $('#' + id).hidden = name !== id;
+  $('#hud').hidden = !(name === 'play' || name === 'clear' || name === 'intro');
+  $('#dock').hidden = $('#sideL').hidden = $('#sideR').hidden = name !== 'play';
+  $('#tip').hidden = name !== 'play' || !tipOpen;
+  if (name !== 'play') $('#toast').hidden = true;
+  fitCamera(); drawPreview();
+}
+function firstUnfinished() { for (let i = 0; i < LEVELS.length; i++) if (!isCleared(i)) return i; return LEVELS.length - 1; }
+function startLevel(i, restart) {
+  tipOpen = false;
+  mode = 'play';
+  buildLevel(i);
+  if (L.coach) setTip(COACH_TEXT[L.intro]); else if (L.tip) setTip(L.tip);
+  if (L.intro && !save.seen[L.intro] && !restart) showIntro(L.intro, true); else showScreen('play');
+  selectPart(0);
+  updateHUD(); updateCoach();
+}
+function showIntro(key, beforePlay) {
+  const g = GIMMICKS[key];
+  $('#introTag').textContent = key === 'build' ? '게임 목표' : beforePlay ? '새로운 규칙' : '공방 도감';
+  $('#introArt').innerHTML = g.art; $('#introTitle').textContent = g.name; $('#introText').textContent = g.text;
+  $('#introGo').textContent = beforePlay ? '해볼게요' : '닫기';
+  $('#introGo').onclick = () => { if (beforePlay) { save.seen[key] = true; writeSave(); showScreen('play'); updateCoach(); } else openDex(); };
+  showScreen('intro'); $('#introGo').focus();
+}
+let dexFrom = 'play';
+function openDex() {
+  if (mode !== 'dex' && mode !== 'intro') dexFrom = mode;
+  const reach = Math.max(firstUnfinished(), mode === 'play' ? levelIndex : 0);
+  const open = new Set(LEVELS.slice(0, reach + 1).map(l => l.intro).filter(Boolean).concat(Object.keys(save.seen)));
+  $('#dexList').replaceChildren(...GIMMICK_ORDER.map(k => {
+    const g = GIMMICKS[k], el = document.createElement('button');
+    el.type = 'button'; el.className = 'dex-item' + (open.has(k) ? '' : ' locked'); el.disabled = !open.has(k);
+    el.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true">${open.has(k) ? g.art : '<circle cx="32" cy="32" r="22" fill="#e6dfd2"/>'}</svg><span><b></b><small></small></span>`;
+    el.querySelector('b').textContent = open.has(k) ? g.name : '아직 못 만났어요';
+    el.querySelector('small').textContent = open.has(k) ? g.text : '작업대를 지나가면 만날 수 있어요';
+    if (open.has(k)) el.addEventListener('click', () => showIntro(k, false));
+    return el;
+  }));
+  showScreen('dex');
+}
+$('#helpBtn').addEventListener('click', openDex);
+$('#closeDex').addEventListener('click', () => { if (dexFrom === 'play') { showScreen('play'); updateCoach(); } else if (dexFrom === 'select') openSelect(); else showTitle(); });
+let selectFrom = 'title', selectChapter = 0;
+function openSelect() { if (mode !== 'select' && mode !== 'dex') selectFrom = mode; selectChapter = chapterOf(mode === 'play' || mode === 'clear' ? levelIndex : firstUnfinished()); renderSelect(); showScreen('select'); }
+function renderSelect() {
+  const next = firstUnfinished();
+  $('#chapters').replaceChildren(...BENCHES.map((bb, k) => {
+    const el = document.createElement('button');
+    el.type = 'button'; el.role = 'tab'; el.setAttribute('aria-selected', String(k === selectChapter)); el.disabled = !isOpen(k * PER);
+    const done = [...Array(PER).keys()].filter(j => isCleared(k * PER + j)).length;
+    el.innerHTML = `<b>${k + 1}</b><span></span><small>${el.disabled ? '잠김' : `${done}/${PER}`}</small>`;
+    el.querySelector('span').textContent = bb.name;
+    el.addEventListener('click', () => { selectChapter = k; renderSelect(); });
+    return el;
+  }));
+  const strip = $('#chapters'), sel = strip.children[selectChapter];
+  if (sel) strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+  const bb = BENCHES[selectChapter];
+  $('#villageGim').textContent = bb.mix ? `이 작업대 · ${bb.mix}` : `이 작업대에서 배우는 규칙 · ${GIMMICKS[bb.gim].name}`;
+  $('#stages').replaceChildren(...LEVELS.slice(selectChapter * PER, (selectChapter + 1) * PER).map((l, j) => {
+    const i = selectChapter * PER + j, rec = save.levels[i], el = document.createElement('button');
+    el.type = 'button'; el.className = 'stage' + (rec ? ' cleared' : '') + (i === next && !rec ? ' next' : ''); el.disabled = !isOpen(i);
+    el.innerHTML = `<span class="num">${i + 1}</span><span class="nm"></span><span class="flowers">${el.disabled ? '' : flowerIcons(rec ? rec.flowers : 0)}</span>`;
+    el.querySelector('.nm').textContent = el.disabled ? '잠김' : rec ? l.name : l.coach ? '배워 보기' : '???';
+    el.setAttribute('aria-label', `${i + 1}${el.disabled ? ' (잠김)' : rec ? `. ${l.name}, 꽃 ${rec.flowers}송이` : ''}`);
+    el.addEventListener('click', () => startLevel(i));
+    return el;
+  }));
+  $('#selectNote').textContent = progressText();
+}
+$('#playBtn').addEventListener('click', () => { Sound.ensure(); startLevel(firstUnfinished()); });
+$('#stagesBtn').addEventListener('click', () => { Sound.ensure(); openSelect(); });
+$('#toSelect').addEventListener('click', openSelect);
+$('#closeSelect').addEventListener('click', () => { if (selectFrom === 'play') showScreen('play'); else showTitle(); });
+function showClear() {
+  const fl = flowersFor(undos), prev = save.levels[levelIndex];
+  save.levels[levelIndex] = { undos: prev ? Math.min(prev.undos, undos) : undos, flowers: Math.max(prev ? prev.flowers : 0, fl) };
+  writeSave();
+  const last = levelIndex === LEVELS.length - 1, benchEnd = levelIndex % PER === PER - 1;
+  $('#clearTitle').textContent = `${L.name} 완성!`;
+  $('#bigFlowers').innerHTML = flowerIcons(fl, 3, 'f-on-anim');
+  const stats = [`되돌리기 ${undos}번`, `부품 ${L.parts.length}개`];
+  if (fl < 3) stats.push('되돌리기 없이 만들면 꽃 3송이');
+  $('#clearStats').replaceChildren(...stats.map(t => Object.assign(document.createElement('span'), { textContent: t })));
+  const nb = !last && benchEnd ? BENCHES[chapterOf(levelIndex) + 1] : null;
+  $('#clearNext').textContent = nb ? (nb.mix ? `다음 작업대 ${nb.name}: ${nb.mix}` : `다음 작업대 ${nb.name}에서 새 규칙 '${GIMMICKS[nb.gim].name}'을 배워요`) : '';
+  $('#clearNext').hidden = !nb;
+  $('#nextBtn').textContent = last ? '스테이지 목록' : benchEnd ? '다음 작업대로' : '다음 작품';
+  hideTip(); showScreen('clear');
+}
+$('#againBtn').addEventListener('click', () => startLevel(levelIndex, true));
+$('#nextBtn').addEventListener('click', () => { if (levelIndex === LEVELS.length - 1) openSelect(); else startLevel(levelIndex + 1); });
+
+// the title screen builds a model by itself
+let demoT = 0;
+function showTitle() { tipOpen = false; mode = 'title'; buildLevel(62); for (let n = 0; n < Math.ceil(L.parts.length / 2); n++) demoStep(); slides.length = 0; for (const g of partGroups.values()) g.position.set(0, 0, 0); $('#playBtn').textContent = totals().done ? '이어하기' : '시작하기'; $('#progressNote').textContent = progressText(); showScreen('title'); }
+function demoStep() {
+  const k = L.order.find(i => !placed.some(p => p.k === i));
+  if (k === undefined) { if (winT < 0) winT = 0; else if (winT > 3) buildLevel(62); return; }
+  const cells = L.parts[k].cells;
+  for (const c of cells) { filled.add(keyC(c)); bpCells.get(keyC(c)).visible = false; }
+  const g = partGroup(cells, L.colour); add(g); partGroups.set(k, g); placed.push({ k, cells });
+  g.position.set(0, 2.2, 0); slides.push({ g, from: g.position.clone(), t: 0 });
+}
+
+// ---------- animation ----------
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
+  const spin = winT >= 0 && winT > 0.6 && !reduced;
+  const target = mode === 'title' && !reduced ? viewRot + dt * 0.3 : spin ? viewRot + dt * 1.2 : viewQ * Math.PI / 2;
+  if (!drag || !drag.moved) viewRot += (target - viewRot) * Math.min(1, dt * (mode === 'title' || spin ? 60 : 8));
+  pivot.rotation.y = viewRot;
+  if (winT >= 0) winT += dt;
+  if (mode === 'title') { demoT += dt; if (demoT > 0.8) { demoT = 0; demoStep(); } }
+  for (const s of slides) { s.t += dt; const k = Math.min(1, s.t / 0.28), e = 1 - (1 - k) ** 3; s.g.position.copy(s.from).multiplyScalar(1 - e); if (k >= 1) s.done = true; }
+  slides = slides.filter(s => !s.done);
+  if (glow) glow.children.forEach(c => { c.material.opacity = 0.3 + Math.sin(t * 6) * 0.18; });
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// ---------- boot ----------
+renderSound();
+window.claude?.hot?.snapshot?.(() => ({ mode, levelIndex }));
+function boot(data) {
+  if (data && data.mode === 'play' && Number.isInteger(data.levelIndex)) startLevel(data.levelIndex, true);
+  else showTitle();
+  requestAnimationFrame(tick);
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
