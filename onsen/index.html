@@ -92,7 +92,7 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
 
 /* overlays */
 .overlay {
-  position: absolute; inset: 0; display: grid; place-items: end center; overflow: auto;
+  position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: end center; overflow: auto;
   padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
 }
 .card {
@@ -117,10 +117,20 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
 .progress-note { margin-top: 14px; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
 #select { place-items: center; background: rgba(191, 230, 223, .55); }
-.select-card { width: min(620px, 100%); }
+.select-card { width: min(620px, 100%); min-width: 0; }
 .select-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .select-head h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
-.stages { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.chapters { position: relative; display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 10px; margin: 0 -4px 6px; scroll-snap-type: x proximity; }
+.chapters button {
+  flex: none; scroll-snap-align: center; display: grid; grid-template-columns: auto auto; column-gap: 6px; align-items: baseline; text-align: left;
+  border: 2px solid var(--panel-line); border-radius: 14px; background: #fff; padding: 6px 12px 5px;
+}
+.chapters button b { font-family: var(--f-display); font-weight: 400; font-size: 18px; color: var(--moss); grid-row: span 2; }
+.chapters button span { font-size: 13px; white-space: nowrap; }
+.chapters button small { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.chapters button[aria-selected="true"] { border-color: var(--yuzu); background: #fff7ea; }
+.chapters button:disabled { cursor: not-allowed; opacity: .5; }
+.stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .stage {
   border: 2px solid var(--panel-line); border-radius: 18px; background: #fff; padding: 10px 8px 9px; text-align: center;
   display: grid; gap: 2px; justify-items: center;
@@ -157,6 +167,7 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
   .pill-btn { padding: 0 14px; font-size: 15px; }
   .card { padding: 18px 16px 16px; border-radius: 22px; }
   .stages { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .stage .num { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -220,6 +231,7 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
         <h2 id="selectTitle">온천 고르기</h2>
         <button type="button" class="round" id="closeSelect" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
+      <div class="chapters" id="chapters" role="tablist" aria-label="마을"></div>
       <div class="stages" id="stages"></div>
       <div class="progress-note" id="selectNote"></div>
     </div>
@@ -342,6 +354,35 @@ function scramble(lv, index) {
   }
 }
 // LOGIC END
+
+// ten villages of ten stages; stages 11-100 come from a generator and are stored here as data
+const CHAPTERS = [
+  { name: '온천 마을 입구', grass: [0x8fd19a, 0x84c890], tree: [0x6dbb7a, 0x58a86a], kind: 'mixed', sky: ['#bfe6df', '#fde3cd'] },
+  { name: '유자 언덕', grass: [0xb5d97f, 0xa9cf73], tree: [0x7cbf5f, 0x6aae55], kind: 'yuzu', sky: ['#d7ecc0', '#ffe2bd'],
+    tip: '새 마을에 왔어요. 지금까지 배운 걸 천천히 써 보세요.' },
+  { name: '대나무 숲', grass: [0x8ccf9f, 0x7fc492], tree: [0x7ac27c, 0x5fae68], kind: 'bamboo', sky: ['#c4e8d4', '#eef3d2'],
+    tip: '욕조가 늘어나요. 원천에서 가까운 갈림길부터 정리해 보세요.' },
+  { name: '단풍 계곡', grass: [0xc2d68a, 0xb7cc7f], tree: [0xf08a4b, 0xe0603f], kind: 'round', sky: ['#f6dcc0', '#fde9d9'],
+    tip: '섬이 길어졌어요. 섬을 돌려 뒤쪽 물길도 살펴보세요.' },
+  { name: '눈꽃 고개', grass: [0xf2f6f7, 0xe6eef0], tree: [0x5e9e86, 0x4f8c76], kind: 'snow', sky: ['#cfe2ef', '#eef2f6'],
+    tip: '높낮이가 커졌어요. 물이 올라갈 수 없는 언덕을 먼저 찾아보세요.' },
+  { name: '벚꽃 강가', grass: [0x9fd6a0, 0x93cc95], tree: [0xffb7cb, 0xff9fb8], kind: 'round', sky: ['#f8d9e3', '#fdeee0'],
+    tip: '고양이가 늘었어요. 고양이 옆 갈림길은 방향을 꼭 확인해요.' },
+  { name: '반딧불 늪', grass: [0x7fbf98, 0x72b38b], tree: [0x4f9a77, 0x3f8a68], kind: 'mixed', sky: ['#cdd7ef', '#f7dccf'],
+    tip: '가짜 물길이 많아요. 원천에서 이어지는 길만 따라가 보세요.' },
+  { name: '구름 정원', grass: [0xa6dcc0, 0x9ad2b4], tree: [0xb9e3c6, 0x9fd6b0], kind: 'round', sky: ['#d8e9f7', '#f4ecf7'],
+    tip: '넓은 정원이에요. 막히면 힌트를 써도 괜찮아요.' },
+  { name: '별빛 산마루', grass: [0x8ec9a6, 0x82bd9a], tree: [0x5b9f8c, 0x4a8e7b], kind: 'pine', sky: ['#c9d3ee', '#efe3f1'],
+    tip: '욕조 다섯 개가 기다려요. 한 마리씩 차근차근 채워요.' },
+  { name: '하늘 온천', grass: [0xbfe39a, 0xb2d98d], tree: [0xffc85c, 0xf2b13f], kind: 'yuzu', sky: ['#ffe7b8', '#fde3cd'],
+    tip: '마지막 마을이에요. 온 세상 카피바라가 기다리고 있어요.' },
+];
+const GENERATED = [{"tiles":["...S","..┌│","...│","..T┘","┌..C"],"heights":["3333","3332","2222","1111","1111"],"fixed":[[3,3]]},{"tiles":[".│C.",".├S.","T┴..","..┌┌"],"heights":["3333","3333","3333","3333"],"fixed":[[1,1]],"yuzu":[[1,0]]},{"tiles":["┌T│..","└─┴S.","....─",".....","....."],"heights":["10122","12233","12233","12233","12233"],"yuzu":[[2,0]]},{"tiles":["...S.","..┌┤.","..┤T.","..T─.",".┌..."],"heights":["33333","33233","33233","33233","33333"],"fixed":[[2,2]]},{"tiles":["┌S...","┤....","└─┬T┌","C....","....."],"heights":["33333","22323","11102","11222","11223"]},{"tiles":["..┌S.","..├┐.","..││.","─.TT.","....."],"heights":["33333","33323","33212","33213","33323"]},{"tiles":["T├─T","├S.─","└.┌.","...."],"heights":["1211","2322","2333","3333"],"yuzu":[[0,2]]},{"tiles":["┌T..","└─S.",".││.","..└T","...."],"heights":["3333","3333","3333","3322","3333"]},{"tiles":[".┌.├┐",".T┬┤S","..T.┴","....."],"heights":["21233","21233","22233","33333"]},{"tiles":["┌.S┬T","┴..└┐",".C┌─┘","..T..","....."],"heights":["33333","33333","33122","32122","32333"],"fixed":[[3,1]]},{"tiles":["...┬S","...T│","...T┤",".....","...┌─"],"heights":["33333","33332","33322","33333","33333"]},{"tiles":["┬S...","└─┐..","CT┤..",".┴T..","│...."],"heights":["23333","22233","21233","22233","22233"],"fixed":[[1,1]]},{"tiles":["│....","..S┌T","..├┤.",".┴││C","...T."],"heights":["33321","33310","33221","33222","33222"],"fixed":[[2,2]],"yuzu":[[2,3]]},{"tiles":["...CT","..S┬┘",".┌.├─","...│.","..│└T"],"heights":["33321","33321","33211","33200","33200"],"fixed":[[3,3]],"yuzu":[[4,2]]},{"tiles":[".┌┐C.",".│S..",".└┬┐.","│.TT.","...┌."],"heights":["33333","32323","32212","32112","33222"]},{"tiles":["...┴S",".┌.┌┘","─.├┘.","T┴┤..",".CT.."],"heights":["33333","33333","33333","22233","32233"],"fixed":[[3,1]]},{"tiles":["S┌T..","┤│.┌.","├┘...","└T...","C...┴"],"heights":["31111","22322","22333","22333","22333"]},{"tiles":["S┐...","┤│.┌.","│TC┌.","└─┐┌.","..T.."],"heights":["33333","32333","32333","33333","33233"],"fixed":[[1,1]]},{"tiles":[".....","T│S..","├.├┘.","└─┤┴.","T─┘C."],"heights":["22333","22333","23333","33333","11233"],"yuzu":[[3,2]]},{"tiles":["..S┬┤",".C┌┘│","..│┌┘",".┌TT.","..┴.┌"],"heights":["33332","33332","33301","33301","33322"]},{"tiles":[".....","...S.","...│T","─┴.└┤","...C│","..│T┘"],"heights":["03333","33333","33322","33322","33322","33322"],"fixed":[[4,3]]},{"tiles":["┌..C│","┴.S┬┤","...T├","....┤","....T","...│."],"heights":["33333","33333","33323","33332","33332","33333"],"fixed":[[4,1]],"yuzu":[[4,0]]},{"tiles":[".....","S│...","├T...","├┬T.─","│....","└─T.."],"heights":["33333","33333","33333","22233","11123","00012"],"fixed":[[1,3]]},{"tiles":["....S","....│","┌T─┴┤","..┌─┘","..TC.","┌│..."],"heights":["21233","21123","11122","11111","21111","32232"],"fixed":[[2,2]]},{"tiles":["┌..T.","C┌S┴┘",".┤┌.C","T┘...",".....","....┌"],"heights":["33322","33333","32333","01233","01233","01233"],"fixed":[[3,1]],"yuzu":[[4,1]]},{"tiles":["C┌─┬┐C","T┘T┘S.","......","...┌..","─...┴."],"heights":["112233","002233","001233","001233","111233"],"fixed":[[1,0]]},{"tiles":[".S....","T├....","├┤C...","│├.│.┌","TT.│.."],"heights":["333333","233333","223333","223333","223333"],"fixed":[[1,1]]},{"tiles":["┌─S┬┐.","│...├.","┴─┤.T.","CCT.┌┌","..┌..."],"heights":["123333","011233","000123","000123","000223"],"fixed":[[4,1]]},{"tiles":[".S┬┴T","C┌┘C.","┬┤.┌.","T├.┌.",".T..─","....."],"heights":["33322","33333","33333","33333","33333","33333"],"fixed":[[1,2]]},{"tiles":["....S┤","..T└┬┘","┌C├┬┘C",".T┘└T.",".┌..┴."],"heights":["222332","222222","222223","112223","222223"],"fixed":[[3,2]],"yuzu":[[3,1]]},{"tiles":["S───T.","│C.┌.─","├T....","└┬T...","┌└....",".....┴"],"heights":["322222","233333","212333","221333","222333","223333"],"fixed":[[3,0],[2,0]],"yuzu":[[1,4]]},{"tiles":[".┌S─T.","┌─┘.┌.","└┐....","C├─T..",".T....","┴....┌"],"heights":["223323","122333","002233","100023","101123","111123"],"fixed":[[1,1],[2,1]]},{"tiles":["S┐.C..","┤└┴┐..","├─TT.┌","└T...┌","......","..┌..."],"heights":["333222","322122","211122","211122","222222","222222"],"fixed":[[1,1]]},{"tiles":["C┌┴┐C.","┌TT┤S│","...├┘.","...┴T.","......","─....."],"heights":["111122","101133","111223","111112","112222","112333"],"fixed":[[4,2]]},{"tiles":["C┌┐.─.","┌┘S.┌.","│.....","├T....","├T....","└─T..┴"],"heights":["333333","223333","223333","223333","222333","221233"],"fixed":[[1,0]]},{"tiles":["┌.S─┬┬",".C├TT│","..│T┬┘","...┌.C",".┌....","......"],"heights":["333333","333222","333222","333333","333333","333333"],"fixed":[[4,2],[5,2]],"yuzu":[[2,2]]},{"tiles":[".T┬┬┴S","C┌┘T..",".├....",".│C...",".└T┴│.","..┌..."],"heights":["222223","222133","223233","222233","210123","222223"],"fixed":[[2,1],[3,0]]},{"tiles":[".C┌┬S.","├┐T│C.","│└┬┴..","T.T...","─.....",".─...─"],"heights":["232333","232333","233333","222333","222333","222333"],"fixed":[[1,1],[3,1]]},{"tiles":[".T┬─S.",".C├┐┌┐",".┌T└┘│",".....┤","....│T",".┌...."],"heights":["112233","111111","110110","111110","111110","111111"],"fixed":[[3,1]]},{"tiles":["┌S....","│├....","┤├─...","│└┐C..","TC├T.┴","┌T┤.┴."],"heights":["333333","333333","333333","322333","322123","322223"],"fixed":[[0,3]],"yuzu":[[2,2]]},{"tiles":["T┬┬S─┤","┌┤..CT","│└....","TC....","┴..┴..","..┴┴.."],"heights":["233333","233333","123333","123333","133333","123333"],"fixed":[[4,0],[1,1]],"yuzu":[[1,2]]},{"tiles":["┌..┌┬.","│.┌S│.","C┌┘.├T","T┘─.T.",".C│...","......"],"heights":["333333","333333","333333","233333","233333","233333"],"fixed":[[4,2],[4,1]]},{"tiles":["T───┤C","T┬┐S┴T","..├┤C.","...└..","┌┌....","┌│...."],"heights":["333333","112333","112233","112233","112233","112233"],"fixed":[[2,2],[1,0]],"yuzu":[[3,3]]},{"tiles":["S┬TC..","┤├─┐.┴","T├T└─T","┴.│.C.","......",".....│"],"heights":["322222","322112","322110","333221","333333","333333"],"fixed":[[0,1],[1,2]]},{"tiles":[".C.│.┴","S─┐C..","├T│...","├┐T│..","│T.┴..","├─T..."],"heights":["333333","333333","222333","112333","101233","000123"],"fixed":[[1,5],[0,3]]},{"tiles":["..┌.┌T",".C.├S┐","T─┐│.│","─C├┤├┘","....│.","┌.─.T."],"heights":["223333","223333","222333","333333","333333","333333"],"fixed":[[3,2]]},{"tiles":["┬──┤├T","│S─┴┴─","└┐C...","C├┐...","┌TT..┴","..┌┌.."],"heights":["222221","133222","001222","000122","000122","011122"],"fixed":[[0,1],[2,3]],"yuzu":[[5,1]]},{"tiles":["┴T┤T┴S","C┌┴──┤",".├─T┌┘",".└.T┘┌",".C.┴..","......"],"heights":["112233","222233","221133","222333","222333","333333"],"fixed":[[5,1],[3,1]],"yuzu":[[1,3]]},{"tiles":["┴S─┬─┐","┌┘┌┘T┘","TC└┬..",".C┌┤.┴","..TT..","....─."],"heights":["332111","330000","320000","320000","320000","332121"],"fixed":[[3,3],[2,1]]},{"tiles":[".┌S.─┴","┌┴┬T..","│.└┬T┌","│├─┘..","│TCC.┌","T....."],"heights":["333333","233323","222212","122233","122233","012333"],"fixed":[[3,3]]},{"tiles":["S─T....","┴┬┐C...","┌┘└T...","├.C...│","T┴─....","┌┌....."],"heights":["3333333","2112333","0111233","0111333","0111233","0111333"],"fixed":[[1,2],[1,0]]},{"tiles":["┌....S","..C..├",".T───┤","..CT┬┤","..┌..T","┌...┌.","....┌."],"heights":["101233","101222","101222","111122","111122","111122","111122"],"fixed":[[4,3]]},{"tiles":["....T.","S─┤C├T",".C└┐│─","..│└┴T","┴┴....","......","..┌..."],"heights":["333212","333211","332211","332111","333222","333333","333333"],"fixed":[[3,3]]},{"tiles":["┴.┴S┴T","...└─┐","...CT┤",".─.T.│",".│.└─┘","....C.","...─.."],"heights":["333333","333211","333211","333111","332111","332232","332233"],"fixed":[[3,4],[5,2]]},{"tiles":["T..┌S│.","├┴─┘C..","├TC....","│......","├┘┌..┌.","└┬T.─.."],"heights":["2333333","3333333","3333333","3333333","3333333","3333333"],"fixed":[[3,0],[0,1]],"yuzu":[[1,4]]},{"tiles":["T┬─┬...","┌S.│┌..","└─T└┐..",".C..└T.","..┌.C┴.","┌....┌."],"heights":["2222222","3322222","3212113","3322112","3333222","3333333"],"fixed":[[0,1]]},{"tiles":["S┬┬┤TT","..││││","...└┴┤","...CCT","┴....─","..─...","┴...┴."],"heights":["332100","332100","333111","333321","333332","333333","333333"],"fixed":[[2,0]],"yuzu":[[2,1]]},{"tiles":["...┌─┐","┬─S┘.│","└─┬┐CT","┌CT├..","┌..T..","┌....─",".....─"],"heights":["233110","233210","111120","111132","111123","111123","111123"],"fixed":[[3,0]]},{"tiles":[".┌..S┬.",".│..┤TC","..┴C├─┐","┴...┘T├","..┌.T├┘","....┴┴T"],"heights":["0333333","0333333","0333222","0333101","0332000","0321000"],"fixed":[[5,4]],"yuzu":[[4,3]]},{"tiles":["┌─┬S│.","├┐└──T","│└─┬┐C","└┐T┘│C",".T.T┘.","─┴....","....│."],"heights":["333322","333211","333333","333333","322123","333223","333333"],"fixed":[[3,2],[0,1]]},{"tiles":["┌┌─S...","C│.│...","C└┬─┐..","..T┌┤C.",".T┬┤T..","...T...","─...│.."],"heights":["2233333","2222333","2100023","2100013","1000012","1100012","1111112"],"fixed":[[3,3],[1,1]]},{"tiles":[".....S┤","│.┌T┬┤T",".│─..└┐",".....C├","...T┬.│","...C│││","...T┴─┴"],"heights":["0222232","2222231","3322232","3323222","3322222","3332222","3332222"],"fixed":[[6,0],[4,1]]},{"tiles":[".┬─S──┐",".T....┤","..┌.C┌┘","...C.│C",".│┴┌┬┴T",".─.TT..","......."],"heights":["2223211","3233321","3333211","3332100","3320000","3320000","3332112"],"fixed":[[1,0],[5,3]]},{"tiles":["┌┐C..┌T","S└┬T┌┘.","└┐└─┤C.","T┤C.T..","┌...┴..","...┌─..","......."],"heights":["2222110","3222111","3211112","2221113","3332223","3333333","3333333"],"fixed":[[1,3],[5,0]]},{"tiles":["..┌─┐S┤",".C└┐T│T","...├─┴┐","..T┘..┤","─....┌│","│┌...C├",".....T┘"],"heights":["0000033","1000023","1010010","1000110","1001120","1011120","2011100"],"fixed":[[6,3],[3,3]]},{"tiles":[".S┬┬.T.","..│└┬┘.","┌.│T┘C.",".┬┴┬...",".T┌┘...",".C└┐┌.┌","..┌T│.."],"heights":["3321000","3320000","3220000","2111111","3111111","3100112","3220222"],"fixed":[[5,1],[2,5]]},{"tiles":[".....┌┐","─.S─┬┤├",".┌.C.│├","....C│T","....C└┐",".┌.┌T┬┘","....T┴T"],"heights":["3333332","3333332","3333332","3333331","3333333","3332012","3333111"],"fixed":[[6,2],[5,1]]},{"tiles":["....S─┐",".┌.T┌┬┤","..C└┤│T","..C┌┤TT","..─.│┌┴",".─.C└┘.","......┌"],"heights":["0233333","0000112","0000112","1000110","3211100","3221111","3222223"],"fixed":[[4,4],[5,5]],"yuzu":[[3,3]]},{"tiles":["┌─┬┴S..","│┌┤T┴..","││.CC..","│├─┬T.┌","T.┌┴T..","...C.│─",".┴....."],"heights":["1233333","1222233","1223333","1222123","1222123","1333223","1233333"],"fixed":[[1,0],[3,3]],"yuzu":[[2,4]]},{"tiles":["─C┌┬─┴S","..│└┐┌┤","C┌┤┌┤T└",".T│T..┴",".C│..┌┌","..└┬┤..","....T.┴"],"heights":["2223333","2223333","2223333","2223333","3323333","3322233","3332123"],"fixed":[[5,0],[2,0]],"yuzu":[[6,2]]},{"tiles":["S.┬─T.─","│.│C..┌","├┴┴┐C..","TT┬┴T..",".│.C.┌.","...┌..│","......."],"heights":["3333333","3333333","3333333","3222233","3333333","3333333","3333333"],"fixed":[[2,1],[3,3]]},{"tiles":["T┐.....","┬S┤C─..","│.T┴...","├.┌....","├─TC.─.","├─┬──T┴","└...C.."],"heights":["2333333","3323333","3323333","2223333","2222223","1110002","1111112"],"fixed":[[0,2],[0,3]],"yuzu":[[0,6]]},{"tiles":["┌──┴┬─┤","S──┐└TT","│C.┴┬┬┐","│...┤.T","...C├.│",".│..T..",".....┌."],"heights":["3333333","3332333","3331100","3332100","3332111","3332111","3333222"],"fixed":[[1,0],[4,4],[4,0]]},{"tiles":["T┬┬SCC┴","┌┤.└┬┐C",".T..┤├┐",".┌..T.│","..┌...│",".┴│..┌┤",".─...T."],"heights":["3333333","3333222","3333121","3333011","3333221","3333311","3333202"],"fixed":[[4,2],[5,5],[6,2]],"yuzu":[[0,1]]},{"tiles":["T┌..┴..","┴┬S┌...","C└┐.T..",".T┼┤│┌.",".T┘├┘C.","..┌┘C.│",".T┴...."],"heights":["1233333","2333233","2222123","3222223","3222223","3212223","2013333"],"fixed":[[3,3],[1,2]]},{"tiles":["┌─┬─┬S.","TT┤.T└┐",".┴│..C├","..T..C├","..┌.C┌┴","...─┴T.","...─..."],"heights":["2222233","2122133","2223233","2212233","2223333","2223333","2223333"],"fixed":[[2,2],[6,2]]},{"tiles":[".T┌┤├┬┐",".┴┘S│.T","┴..┴┤C.",".T┬┬┴.─","└┬┤.C..","CT.┌..│","│┌....."],"heights":["0022000","0013000","0012111","1111123","1112223","2113333","2223333"],"fixed":[[2,3],[4,1]],"yuzu":[[0,4]]},{"tiles":["┴.....┌","....C├S","┴....┴┐",".┌..┬─┤","T.T─│CT","└─┤T┤C.",".T┴─┴.─"],"heights":["0003333","1223333","1112333","1112233","1101233","1111123","1111123"],"fixed":[[4,5],[2,6]]},{"tiles":["┴T.C.──","┌┤S┬...","│└┤├──┐","└┐TT.CT","─└┐....",".C├..─.",".┌└T..."],"heights":["3333333","3332222","3332111","2222211","2112222","2111222","2111223"],"fixed":[[2,4],[2,2],[5,2]]},{"tiles":["├─┴─┴S.","│┌┬─┐├┘","T│├┐└┴┐",".TT└TC│","...C│T┘","┌..─..C",".┴...┴."],"heights":["2222333","2222222","2122222","1021012","1122111","1122222","2222222"],"fixed":[[4,1],[0,1],[6,4]],"yuzu":[[6,1]]},{"tiles":[".C│C.S┐",".┬┬┐.C│","T┤T│┌┬┘","..┌┴┤T.","..T│T│.","......─","...│.┌."],"heights":["1122333","1122233","1122222","1222222","1222223","1222223","1333333"],"fixed":[[3,2],[2,1],[1,1]]},{"tiles":["T──┴S.┴","...┬┤C.",".C┌┤T.─","C┌┤....","T│├T..┌","└┤└T┌..","┌..┌..."],"heights":["2233333","3332333","3322333","2222333","2211233","2210123","2221123"],"fixed":[[2,3],[1,0],[4,1]]},{"tiles":["SC....┴","├┬─┬T┴.","││.┤.┌.","T.┌┴┐┌.",".C│.└T┴",".T┴┴T┴.","..C...."],"heights":["3322233","2211123","1221123","0100012","1200001","1000001","1111111"],"fixed":[[1,1],[2,5],[4,3]],"yuzu":[[1,2]]},{"tiles":["─.....┌","┌S.T.C.","T│├┼┐┌T","└┴┤│└┘.","┌.┤└T..",".C└T...","..C..──"],"heights":["3332222","2320121","0200000","0110000","1100011","1200011","2211111"],"fixed":[[2,2],[1,2],[4,3]]},{"tiles":["..T.S┌.",".─└┬┴..",".┌C│.│.","..C├┐┴.","...T│┌T","┴.T┐├┤C","..T┴┘.─"],"heights":["2223333","3333333","3333333","3332222","3332222","3322223","3322223"],"fixed":[[4,4],[3,3]]},{"tiles":[".S│├┤.│",".┴─┘├┴T","┴TT┬┴┐T",".┴─┘C├┤",".┌C┴C│.",".....T┌","......."],"heights":["3321111","3332000","2000000","1000000","2111000","2222100","2222211"],"fixed":[[1,1],[5,4]]},{"tiles":["S..┌...","┴┤...CC","┌┴T.T┬┐","┴┬┬──┤T",".│└T.└.",".TC─.─┴","...┌.┌┌"],"heights":["3333333","2223222","2213000","2222210","2210111","2221111","2332233"],"fixed":[[5,2],[1,1]],"yuzu":[[5,4]]},{"tiles":["T┤S..┴┌","C├┴..┴│","┬┤T┐T..","│└┐├┘..","└T└┤C..","C..┤┴─│","...┴─T."],"heights":["1133333","2222233","2211023","2221012","2111112","2211112","2211102"],"fixed":[[3,3],[4,6],[3,6]]},{"tiles":["├┬┴┬┐S.","││CT├┤┌","│T.│T.─","│.─....","│CT...┌","│┴│T...","└─┴┤C.."],"heights":["0012333","0012333","0022233","0012233","0002233","0000233","0000123"],"fixed":[[1,6],[4,1],[0,3]]},{"tiles":["TCS┬T..","├┬┘└┐C.","│T┌┐├T.","├─┘│...","│.┬┘C─┌","..│┌│.┴","..T┴..."],"heights":["3333222","3333333","3333333","3333333","3323333","3312333","3212333"],"fixed":[[0,3],[3,3]],"yuzu":[[0,4]]}];
+GENERATED.forEach((L, n) => {
+  const stage = 11 + n, ch = CHAPTERS[Math.floor((stage - 1) / 10)];
+  LEVELS.push({ ...L, name: `${ch.name} ${(stage - 1) % 10 + 1}`, tip: (stage - 1) % 10 === 0 ? ch.tip : '' });
+});
+const chapterOf = i => Math.floor(i / 10);
 
 const $ = s => document.querySelector(s);
 const TAU = Math.PI * 2;
@@ -522,17 +563,27 @@ function makeCat() {
   return g;
 }
 
-function makeTree(rnd) {
+function makeTree(rnd, th) {
   const g = new THREE.Group();
-  const trunk = cyl(0.04, 0.06, 0.24, M(COLORS.trunk), 8); trunk.position.y = 0.12; g.add(trunk);
-  if (rnd() < 0.5) {
-    const a = sph(0.2, M(COLORS.tree)); a.position.y = 0.34; g.add(a);
-    const b = sph(0.14, M(COLORS.tree2)); b.position.set(0.08, 0.5, 0.04); g.add(b);
-  } else {
-    const a = mesh(new THREE.ConeGeometry(0.2, 0.34, 8), M(COLORS.tree2)); a.position.y = 0.36; g.add(a);
-    const b = mesh(new THREE.ConeGeometry(0.15, 0.26, 8), M(COLORS.tree)); b.position.y = 0.54; g.add(b);
+  const [c1, c2] = th.tree;
+  if (th.kind === 'bamboo') {
+    for (let i = 0; i < 3; i++) {
+      const hgt = 0.5 + rnd() * 0.35;
+      const stalk = cyl(0.03, 0.035, hgt, M(i % 2 ? c1 : c2), 8); stalk.position.set((rnd() - 0.5) * 0.25, hgt / 2, (rnd() - 0.5) * 0.25); g.add(stalk);
+      const leaf = sph(0.5, M(c1)); leaf.scale.set(0.16, 0.05, 0.08); leaf.position.set(stalk.position.x + 0.06, hgt * 0.85, stalk.position.z); leaf.rotation.z = -0.4; g.add(leaf);
+    }
+    return g;
   }
-  if (rnd() < 0.35) { // a yuzu tree
+  const trunk = cyl(0.04, 0.06, 0.24, M(COLORS.trunk), 8); trunk.position.y = 0.12; g.add(trunk);
+  const pine = th.kind === 'pine' || th.kind === 'snow' || (th.kind === 'mixed' && rnd() < 0.5);
+  if (!pine) {
+    const a = sph(0.2, M(c1)); a.position.y = 0.34; g.add(a);
+    const b = sph(0.14, M(c2)); b.position.set(0.08, 0.5, 0.04); g.add(b);
+  } else {
+    const a = mesh(new THREE.ConeGeometry(0.2, 0.34, 8), M(c2)); a.position.y = 0.36; g.add(a);
+    const b = mesh(new THREE.ConeGeometry(0.15, 0.26, 8), M(th.kind === 'snow' ? COLORS.white : c1)); b.position.y = 0.54; g.add(b);
+  }
+  if (th.kind === 'yuzu' || rnd() < 0.25) { // a yuzu tree
     for (let i = 0; i < 3; i++) { const y = sph(0.035, M(COLORS.yuzu), { cast: false }); y.position.set(Math.cos(i * 2.1) * 0.16, 0.32 + i * 0.04, Math.sin(i * 2.1) * 0.16); g.add(y); }
   }
   return g;
@@ -560,13 +611,13 @@ function makeTrough(mask, stone) {
   const water = [];
   const hub = box(0.44, 0.16, 0.44, m); hub.position.y = 0.08; g.add(hub);
   const hubIn = box(0.24, 0.02, 0.24, inner, { cast: false }); hubIn.position.y = 0.161; g.add(hubIn);
-  const hubW = box(0.24, 0.05, 0.24, null, { cast: false }); hubW.position.y = 0.17; water.push(hubW); g.add(hubW);
+  const hubW = box(0.24, 0.05, 0.24, M(COLORS.water), { cast: false }); hubW.position.y = 0.17; water.push(hubW); g.add(hubW);
   DIRS.forEach(([dx, dz, bit]) => {
     if (!(mask & bit)) return;
     const along = dx !== 0;
     const arm = box(along ? 0.5 : 0.44, 0.16, along ? 0.44 : 0.5, m); arm.position.set(dx * 0.25, 0.08, dz * 0.25); g.add(arm);
     const armIn = box(along ? 0.5 : 0.24, 0.02, along ? 0.24 : 0.5, inner, { cast: false }); armIn.position.set(dx * 0.26, 0.161, dz * 0.26); g.add(armIn);
-    const w = box(along ? 0.52 : 0.24, 0.05, along ? 0.24 : 0.52, null, { cast: false }); w.position.set(dx * 0.26, 0.17, dz * 0.26); water.push(w); g.add(w);
+    const w = box(along ? 0.52 : 0.24, 0.05, along ? 0.24 : 0.52, M(COLORS.water), { cast: false }); w.position.set(dx * 0.26, 0.17, dz * 0.26); water.push(w); g.add(w);
   });
   return { g, water };
 }
@@ -592,6 +643,9 @@ function buildLevel(i, showcase) {
   moves = 0; lv.done = false;
   const ox = -(lv.W - 1) / 2, oz = -(lv.H - 1) / 2;
   const rnd = mulberry32(i * 131 + 5);
+  const th = CHAPTERS[chapterOf(i)];
+  document.documentElement.style.setProperty('--sky-top', th.sky[0]);
+  document.documentElement.style.setProperty('--sky-bot', th.sky[1]);
   const maxH = Math.max(...lv.cells.map(c => c.h));
 
   // floating island base
@@ -611,7 +665,7 @@ function buildLevel(i, showcase) {
     c.pos = new THREE.Vector3(px, ty, pz);
     const colH = 0.5 + ty;
     const col = box(1, colH, 1, M(COLORS.dirt)); col.position.set(px, ty - colH / 2 - 0.06, pz); add(col);
-    const cap = box(1, 0.12, 1, M((c.x + c.z) % 2 ? COLORS.grass : COLORS.grass2)); cap.position.set(px, ty - 0.06, pz); add(cap);
+    const cap = box(1, 0.12, 1, M(th.grass[(c.x + c.z) % 2])); cap.position.set(px, ty - 0.06, pz); add(cap);
     c.wet = 0; c.wetTarget = 0; c.wetDelay = 0; c.waterMeshes = [];
 
     if (c.kind === 'pipe' || c.kind === 'src') {
@@ -656,7 +710,7 @@ function buildLevel(i, showcase) {
     } else {
       const r = rnd();
       let deco = null;
-      if (r < 0.38) deco = makeTree(rnd);
+      if (r < 0.38) deco = makeTree(rnd, th);
       else if (r < 0.66) deco = makeFlowers(rnd);
       else if (r < 0.76) deco = makeMushroom();
       else if (r < 0.86) { deco = mesh(new THREE.DodecahedronGeometry(0.12 + rnd() * 0.06), M(COLORS.rock)); deco.position.y = 0.06; const g = new THREE.Group(); g.add(deco); deco = g; }
@@ -665,7 +719,7 @@ function buildLevel(i, showcase) {
   }
   view.target = view.rot = showcase ? view.rot : 0;
   fitCamera(maxH);
-  refreshFlow(showcase);
+  refreshFlow(true);
   if (showcase) for (const c of lv.cells) { c.wet = c.wetTarget; c.wetDelay = 0; if (c.capy) c.happy = c.wet; }
 }
 
@@ -819,6 +873,7 @@ function toast(text) {
 function updateHUD() {
   if (mode !== 'play') return;
   $('#stageTitle').textContent = `${levelIndex + 1}. ${LEVELS[levelIndex].name}`;
+  $('#stageTitle').title = CHAPTERS[chapterOf(levelIndex)].name;
   $('#moveLabel').textContent = `돌린 횟수 ${moves} · 목표 ${par}`;
 }
 function renderSound() {
@@ -867,36 +922,53 @@ function startLevel(i) {
   lastFlow = null;
   mode = 'play';
   buildLevel(i, false);
-  tipOpen = true;
+  tipOpen = !!LEVELS[i].tip;
   $('#tipText').textContent = LEVELS[i].tip;
   showScreen('play');
   updateHUD();
 }
+let selectFrom = 'title', selectChapter = 0;
 function openSelect() {
+  if (mode !== 'select') selectFrom = mode;
+  selectChapter = chapterOf(mode === 'play' || mode === 'clear' ? levelIndex : firstUnfinished());
+  renderSelect();
+  showScreen('select');
+}
+function renderSelect() {
   const next = firstUnfinished();
-  $('#stages').replaceChildren(...LEVELS.map((L, i) => {
+  $('#chapters').replaceChildren(...CHAPTERS.map((ch, k) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.role = 'tab';
+    b.setAttribute('aria-selected', String(k === selectChapter));
+    b.disabled = !isOpen(k * 10);
+    const done = LEVELS.slice(k * 10, k * 10 + 10).filter((_, j) => isCleared(k * 10 + j)).length;
+    b.innerHTML = `<b>${k + 1}</b><span></span><small>${b.disabled ? '잠김' : `${done}/10`}</small>`;
+    b.querySelector('span').textContent = ch.name;
+    b.addEventListener('click', () => { selectChapter = k; renderSelect(); });
+    return b;
+  }));
+  // scroll only the tab strip; scrollIntoView would also drag the whole overlay sideways
+  const strip = $('#chapters'), sel = strip.children[selectChapter];
+  if (sel) strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+  $('#stages').replaceChildren(...LEVELS.slice(selectChapter * 10, selectChapter * 10 + 10).map((L, j) => {
+    const i = selectChapter * 10 + j;
     const b = document.createElement('button');
     b.type = 'button';
     const rec = save.levels[i];
     b.className = 'stage' + (rec ? ' cleared' : '') + (i === next && !rec ? ' next' : '');
     b.disabled = !isOpen(i);
     b.innerHTML = `<span class="num">${i + 1}</span><span class="nm"></span><span class="flowers">${b.disabled ? '' : flowerIcons(rec ? rec.flowers : 0)}${rec && rec.yuzu ? '<svg aria-label="유자"><use href="#yuzu"/></svg>' : ''}</span>`;
-    b.querySelector('.nm').textContent = b.disabled ? '잠겨 있어요' : L.name;
+    b.querySelector('.nm').textContent = b.disabled ? '잠김' : (i < 10 ? L.name : `${j + 1}번 온천`);
     b.setAttribute('aria-label', `${i + 1}. ${L.name}${b.disabled ? ' (잠김)' : rec ? `, 꽃 ${rec.flowers}송이` : ''}`);
     b.addEventListener('click', () => startLevel(i));
     return b;
   }));
   $('#selectNote').textContent = progressText();
-  showScreen('select');
 }
 $('#playBtn').addEventListener('click', () => { Sound.ensure(); startLevel(firstUnfinished()); });
 $('#stagesBtn').addEventListener('click', () => { Sound.ensure(); openSelect(); });
 $('#toSelect').addEventListener('click', openSelect);
-$('#closeSelect').addEventListener('click', () => {
-  if (lv && levelObjs.length && lastFlow && !LEVELS[levelIndex].showcase && mode === 'select' && hudLevelActive) showScreen('play');
-  else showTitle();
-});
-let hudLevelActive = false;
+$('#closeSelect').addEventListener('click', () => { if (selectFrom === 'play') showScreen('play'); else showTitle(); });
 
 function showClear(f) {
   const fl = flowersFor(moves, par), gotYuzu = f.yuzu.length > 0;
@@ -905,7 +977,7 @@ function showClear(f) {
   save.levels[levelIndex] = { moves: best, flowers: Math.max(prev ? prev.flowers : 0, fl), yuzu: !!(gotYuzu || (prev && prev.yuzu)) };
   writeSave();
   const last = levelIndex === LEVELS.length - 1;
-  $('#clearTitle').textContent = last ? '온 마을이 따끈해졌어요' : f.tubs.length > 1 ? '다들 온천에 들어갔어요' : '온천에 쏙 들어갔어요';
+  $('#clearTitle').textContent = last ? '온 세상이 따끈해졌어요' : levelIndex % 10 === 9 ? `${CHAPTERS[chapterOf(levelIndex)].name} 완성!` : f.tubs.length > 1 ? '다들 온천에 들어갔어요' : '온천에 쏙 들어갔어요';
   $('#bigFlowers').innerHTML = flowerIcons(fl, 3, 'f-on-anim');
   const stats = [`돌린 횟수 ${moves} · 목표 ${par}`];
   if (prev && moves < prev.moves) stats.push('최고 기록');
@@ -925,7 +997,7 @@ function showTitle() {
   clearTimeout(clearTimer);
   lastFlow = null;
   mode = 'title';
-  buildLevel(LEVELS.length - 1, true);
+  buildLevel(9, true);
   $('#playBtn').textContent = totals().done ? '이어하기' : '시작하기';
   $('#progressNote').textContent = progressText();
   showScreen('title');
