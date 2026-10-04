@@ -159,7 +159,39 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
 .stats { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 16px; }
 .stats span { padding: 4px 12px; border-radius: 999px; background: #f3efe6; font-size: 14px; font-variant-numeric: tabular-nums; }
 
+.hud-right { display: flex; gap: 8px; }
+.goals { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; margin-top: 6px; }
+.goal {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px 2px 7px; border-radius: 999px;
+  background: rgba(255, 253, 248, .88); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.goal svg { width: 16px; height: 16px; }
+.goal .dot { width: 10px; height: 10px; border-radius: 50%; }
+.goal.done { background: var(--moss); color: #fff; }
+.goal.warn { background: var(--ink); color: var(--panel); }
+.goal.soft { opacity: .8; }
+.guide-step { font-family: var(--f-display); font-weight: 400; color: var(--yuzu-deep); margin-right: 6px; }
+.overlay.center { place-items: center; background: rgba(191, 230, 223, .55); }
+.intro-card { text-align: center; width: min(380px, 100%); }
+.intro-tag { display: inline-block; padding: 2px 12px; border-radius: 999px; background: var(--yuzu); color: #fff; font-family: var(--f-display); font-size: 14px; }
+.gim-art { display: block; width: 112px; height: 112px; margin: 12px auto 6px; }
+.intro-card h2 { margin: 0 0 6px; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.intro-card p { margin: 0 auto 18px; color: var(--ink-soft); max-width: 26em; text-wrap: pretty; }
+.dex-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); max-height: min(62vh, 560px); overflow: auto; padding: 2px; }
+.dex-item {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: center; text-align: left;
+  background: #fff; border: 2px solid var(--panel-line); border-radius: 16px; padding: 8px 10px;
+}
+.dex-item svg { width: 52px; height: 52px; }
+.dex-item b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 16px; }
+.dex-item small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; color: var(--ink-soft); line-height: 1.4; }
+.dex-item.locked { cursor: default; background: #f6f4ef; }
+.village-gim { margin: -2px 0 10px; font-size: 13px; color: var(--ink-soft); }
+.clear-next { margin: -6px 0 14px; font-size: 14px; color: var(--yuzu-deep); text-wrap: balance; }
 @media (max-width: 480px) {
+  .hud-right { flex-direction: column; gap: 6px; }
+  .goal { font-size: 12px; padding: 1px 8px 1px 6px; }
+
   .hud { padding-inline: 12px; gap: 6px; }
   .round { width: 42px; height: 42px; }
   .stage-name b { font-size: 18px; }
@@ -197,13 +229,16 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
     <button type="button" class="round" id="toSelect" aria-label="스테이지 목록">
       <svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"/></svg>
     </button>
-    <div class="stage-name"><b id="stageTitle"></b><span id="moveLabel"></span></div>
-    <button type="button" class="round" id="soundBtn" aria-label="소리 끄기">
-      <svg viewBox="0 0 24 24" id="soundIcon"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
-    </button>
+    <div class="stage-name"><b id="stageTitle"></b><span id="moveLabel"></span><div class="goals" id="goals" aria-live="polite"></div></div>
+    <div class="hud-right">
+      <button type="button" class="round" id="helpBtn" aria-label="물길 도감"><svg viewBox="0 0 24 24"><path d="M9.2 9a3 3 0 1 1 4.3 2.7c-.9.5-1.5 1.2-1.5 2.3v.5"/><path d="M12 18h.01"/></svg></button>
+      <button type="button" class="round" id="soundBtn" aria-label="소리 끄기">
+        <svg viewBox="0 0 24 24" id="soundIcon"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      </button>
+    </div>
   </header>
 
-  <button type="button" class="tip" id="tip" hidden><svg viewBox="0 0 40 30" aria-hidden="true"><use href="#capy"/></svg><span id="tipText"></span></button>
+  <button type="button" class="tip" id="tip" hidden><svg viewBox="0 0 40 30" aria-hidden="true"><use href="#capy"/></svg><span><b class="guide-step" id="tipStep" hidden></b><span id="tipText"></span></span></button>
   <div class="toast" id="toast" role="status" hidden></div>
 
   <nav class="tools" id="tools" hidden aria-label="게임 도구">
@@ -232,8 +267,29 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
         <button type="button" class="round" id="closeSelect" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div class="chapters" id="chapters" role="tablist" aria-label="마을"></div>
+      <p class="village-gim" id="villageGim"></p>
       <div class="stages" id="stages"></div>
       <div class="progress-note" id="selectNote"></div>
+    </div>
+  </section>
+
+  <section class="overlay center" id="intro" hidden>
+    <div class="card intro-card" role="dialog" aria-labelledby="introTitle">
+      <span class="intro-tag" id="introTag"></span>
+      <svg class="gim-art" id="introArt" viewBox="0 0 64 64" aria-hidden="true"></svg>
+      <h2 id="introTitle"></h2>
+      <p id="introText"></p>
+      <button type="button" class="primary" id="introGo">해볼게요</button>
+    </div>
+  </section>
+
+  <section class="overlay center" id="dex" hidden>
+    <div class="card select-card" role="dialog" aria-labelledby="dexTitle">
+      <div class="select-head">
+        <h2 id="dexTitle">물길 도감</h2>
+        <button type="button" class="round" id="closeDex" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="dex-list" id="dexList"></div>
     </div>
   </section>
 
@@ -242,6 +298,7 @@ button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
       <h2 id="clearTitle"></h2>
       <div class="big-flowers" id="bigFlowers"></div>
       <div class="stats" id="clearStats"></div>
+      <p class="clear-next" id="clearNext" hidden></p>
       <div class="btn-row">
         <button type="button" class="secondary" id="againBtn">다시 하기</button>
         <button type="button" class="primary" id="nextBtn">다음 온천</button>
@@ -259,42 +316,77 @@ const N = 1, E = 2, S = 4, W = 8;
 const DIRS = [[0, -1, N, S], [1, 0, E, W], [0, 1, S, N], [-1, 0, W, E]];   // dx, dz, bit, opposite bit
 const BOX = { '─': E|W, '│': N|S, '┌': E|S, '┐': S|W, '└': N|E, '┘': N|W, '├': N|E|S, '┤': N|S|W, '┬': E|S|W, '┴': N|E|W, '┼': N|E|S|W };
 const rotCW = m => ((m << 1) | (m >> 3)) & 15;
+const rotBy = (m, k) => { for (let i = 0; i < ((k % 4) + 4) % 4; i++) m = rotCW(m); return m; };
 
+// Tiles: S/Q spring (Q = second colour), T tub, A/B tub that wants spring S/Q water, C cat, . grass, box chars = pipes.
+// Extras by [x, z]: fixed, yuzu, gate, scale, links [[a, b]], leaves, ice, lift [x, z, otherHeight], cloud.
+// intro: gimmick card shown the first time; guide: coach steps { at: [x, z], until: wet|clear|thaw|height|sol, text }.
 const LEVELS = [
-  { name: '첫 온천', tip: '물길을 눌러 돌려요. 원천의 온천물을 욕조까지 이어주세요.',
-    tiles: ['S─┐', '..│', '..T'], heights: ['222', '111', '000'] },
+  { name: '첫 온천', intro: 'goal',
+    tiles: ['S─┐', '..│', '..T'], heights: ['222', '111', '000'],
+    guide: [{ at: [2, 2], until: 'wet', text: '반짝이는 물길을 눌러 돌려요. 원천에서 욕조까지 물길을 이어 주세요.' }] },
   { name: '갈림길', tip: '갈림길 하나로 두 마리 모두에게 물을 나눠 줄 수 있어요.',
     tiles: ['..S..', '..│..', '┌─┴─┐', '│...│', 'T...T'], heights: ['33333', '22222', '22222', '11111', '00000'] },
-  { name: '물은 아래로', tip: '물은 높은 곳으로 올라가지 못해요. 섬을 돌려 높이를 살펴보세요.',
+  { name: '물은 아래로', intro: 'height', tip: '물은 높은 곳으로 올라가지 못해요. 섬을 돌려 높이를 살펴보세요.',
     tiles: ['S─┬─T', '..└─┘', '.....'], heights: ['22230', '11111', '00000'] },
-  { name: '낮잠 자는 고양이', tip: '고양이는 물을 싫어해요. 고양이 쪽으로 물이 흐르지 않게 해주세요.',
+  { name: '낮잠 자는 고양이', intro: 'cat', tip: '고양이 쪽으로 물이 흐르지 않게 갈림길 방향을 정해 주세요.',
     tiles: ['S┴─┐', '.│.│', '.C.│', '...T'], heights: ['3333', '2222', '1111', '0000'] },
-  { name: '돌 물길', tip: '돌로 된 물길은 돌릴 수 없어요. 계단을 따라 물이 떨어져요.',
+  { name: '돌 물길', intro: 'stone', tip: '돌로 된 물길은 돌릴 수 없어요. 계단을 따라 물이 떨어져요.',
     tiles: ['S──┐.', '┌──┘.', '│.C..', '└─┬─T'], heights: ['33333', '22223', '11111', '11100'], fixed: [[1, 0], [2, 1]] },
-  { name: '유자 띄우기', tip: '유자 상자에 물이 닿으면 유자를 얻어요. 꼭 모으지 않아도 괜찮아요.',
+  { name: '유자 띄우기', intro: 'yuzu', tip: '유자 상자에 물이 닿으면 유자를 얻어요. 꼭 모으지 않아도 괜찮아요.',
     tiles: ['..│..', 'S─┴─┐', '│.C.│', '│...│', 'T...T'], heights: ['22222', '22222', '11111', '11111', '00000'], yuzu: [[2, 0]] },
-  { name: '세 마리 손님', tip: '욕조 세 개를 모두 채워주세요.',
+  { name: '세 마리 손님', tip: '욕조 세 개를 모두 채워 주세요.',
     tiles: ['┌─┴─┬S', '│.C.│.', '│...├T', '└┐..│.', '.T..T.'], heights: ['333333', '222222', '222221', '111111', '000000'], fixed: [[2, 0]] },
   { name: '계곡 폭포', tip: '열십자 물길은 돌려도 모양이 그대로예요.',
-    tiles: ['..S...', '.┌┼┐..', '.│││..', '.││┴─┐', '.│TC.│', 'T┘..T┘'], heights: ['444444', '333333', '333333', '222222', '111111', '000000'], fixed: [[1, 3]] },
+    tiles: ['..S...', '.┌┼┐..', '.│││..', '.││┴─┐', '.│TC.│', 'T┘..T┘'], heights: ['333333', '333333', '333333', '222222', '111111', '000000'], fixed: [[1, 3]] },
   { name: '두 고양이', tip: '고양이 두 마리가 낮잠을 자요. 조용히 비켜 가요.',
     tiles: ['S─┬──┐', 'C.│..│', '┌─┤.C│', '│.│.┌┘', 'T.T.T.'], heights: ['333333', '222222', '222222', '111111', '000000'], yuzu: [[4, 0]] },
-  { name: '모두 함께 온천', tip: '온 마을 카피바라가 기다리고 있어요.',
-    tiles: ['...S...', '─┬─┼─┐.', '.│.│.│.', '┌┴┐T┌┴┐', '│C│.│C│', 'T.T.T.T'], heights: ['4444444', '3333333', '3333333', '2222222', '1111111', '0000000'],
+  { name: '모두 함께 온천', tip: '첫 마을의 마지막 온천이에요. 지금까지 배운 걸 모두 써 보세요.',
+    tiles: ['...S...', '─┬─┼─┐.', '.│.│.│.', '┌┴┐T┌┴┐', '│C│.│C│', 'T.T.T.T'], heights: ['3333333', '3333333', '3333333', '2222222', '1111111', '0000000'],
     fixed: [[2, 1], [3, 2]], yuzu: [[0, 1]] },
 ];
 
+// first stage of each later village teaches its gimmick
+const TUTORIALS = {
+  11: { intro: 'gate', tiles: ['S─┬─┐', '..│.│', '..│.│', '....T'], heights: ['22222', '22222', '11111', '00000'],
+    gate: [[4, 1]], scale: [[2, 2]],
+    guide: [{ at: [2, 2], until: 'wet', text: '먼저 유자 저울까지 물을 보내요. 저울이 젖으면 수문이 열려요.' },
+            { at: [4, 3], until: 'wet', text: '수문이 열렸어요! 이제 욕조까지 이어 주세요.' }] },
+  21: { intro: 'link', tiles: ['S─┐', '┌─┘', '└─T'], heights: ['222', '111', '000'], links: [[[1, 0], [1, 2]]],
+    guide: [{ at: [1, 0], until: 'sol', text: '끈으로 묶인 물길은 함께 돌아요. 반짝이는 물길을 돌려 보세요.' },
+            { at: [2, 2], until: 'wet', text: '아래쪽 짝꿍도 같이 돌았죠? 나머지도 이어 주세요.' }] },
+  31: { intro: 'leaves', tiles: ['S─┐.', '.─│.', 'C.└T'], heights: ['2222', '1111', '1110'], leaves: [[2, 1], [1, 1]],
+    guide: [{ at: [2, 1], until: 'clear', text: '낙엽에 덮인 물길은 물이 지나가지 못해요. 눌러서 치워 주세요.' },
+            { at: [3, 2], until: 'wet', text: '낙엽 밑에 숨은 물길이 보이죠? 욕조까지 이어 주세요.' }] },
+  41: { intro: 'ice', tiles: ['S─┐.', '..│.', '..└T'], heights: ['2222', '1111', '1110'], ice: [[2, 1]],
+    guide: [{ at: [2, 1], until: 'thaw', text: '얼어붙은 물길은 돌릴 수 없어요. 따끈한 물을 바로 옆까지 보내 녹여요.' },
+            { at: [2, 1], until: 'sol', text: '녹았어요! 이제 돌릴 수 있어요.' },
+            { at: [3, 2], until: 'wet', text: '욕조까지 이어 주세요.' }] },
+  51: { intro: 'lift', tiles: ['S─┐.', '..│.', '..└T'], heights: ['2222', '1111', '1110'], lift: [[2, 1, 3]],
+    guide: [{ at: [2, 1], until: 'height', text: '높낮이 블록은 누를 때마다 한 칸씩 오르내려요. 너무 높으면 물이 못 올라가요.' },
+            { at: [3, 2], until: 'wet', text: '좋아요! 이제 욕조까지 이어 주세요.' }] },
+  61: { intro: 'springs', tiles: ['S...S', '│...│', '└─T.T'], heights: ['22222', '11111', '00000'],
+    guide: [{ at: [2, 2], until: 'wet', text: '원천이 두 개예요. 왼쪽 원천에서 가운데 욕조로 이어 주세요.' },
+            { at: [4, 2], until: 'wet', text: '오른쪽 원천은 오른쪽 욕조로요.' }] },
+  71: { intro: 'cloud', tiles: ['S─┐.', '..│.', '..└T'], heights: ['2222', '1111', '1222'], cloud: [[2, 1]],
+    guide: [{ at: [2, 1], until: 'wet', text: '구름 물길까지 물을 보내 보세요.' },
+            { at: [3, 2], until: 'wet', text: '구름 물길은 물을 한 칸 높은 곳으로도 올려 줘요. 언덕 위 욕조까지 이어 주세요.' }] },
+  81: { intro: 'colors', tiles: ['S...Q', '│...│', '└┐┬┌┘', '.A.B.'], heights: ['33333', '22222', '11111', '00000'],
+    guide: [{ at: [1, 3], until: 'wet', text: '주황 유자탕 원천은 주황 욕조로 보내요.' },
+            { at: [3, 3], until: 'wet', text: '초록 쑥탕 원천은 초록 욕조로요. 두 물이 섞이면 카피바라가 들어가지 않아요.' }] },
+};
+
 function parseLevel(L) {
-  const H = L.tiles.length, Wd = L.tiles[0].length;
+  const H = L.tiles.length, Wd = [...L.tiles[0]].length;
   const cells = [];
   for (let z = 0; z < H; z++) {
     const row = [...L.tiles[z]];
     if (row.length !== Wd || L.heights[z].length !== Wd) throw new Error(`${L.name}: row ${z} width mismatch`);
     for (let x = 0; x < Wd; x++) {
       const ch = row[x], h = +L.heights[z][x];
-      const c = { x, z, h, kind: 'empty', sol: 0, mask: 0, fixed: false, yuzu: false };
-      if (ch === 'S') c.kind = 'src';
-      else if (ch === 'T') c.kind = 'tub';
+      const c = { x, z, h, hSol: h, kind: 'empty', sol: 0, mask: 0, k: 0 };
+      if (ch === 'S' || ch === 'Q') { c.kind = 'src'; c.color = ch === 'Q' ? 'b' : 'a'; }
+      else if (ch === 'T' || ch === 'A' || ch === 'B') { c.kind = 'tub'; c.want = ch === 'A' ? 'a' : ch === 'B' ? 'b' : null; }
       else if (ch === 'C') c.kind = 'cat';
       else if (BOX[ch] !== undefined) { c.kind = 'pipe'; c.sol = c.mask = BOX[ch]; }
       else if (ch !== '.') throw new Error(`${L.name}: unknown tile ${ch}`);
@@ -302,87 +394,220 @@ function parseLevel(L) {
     }
   }
   const at = (x, z) => (x >= 0 && z >= 0 && x < Wd && z < H ? cells[z * Wd + x] : null);
-  for (const [x, z] of L.fixed || []) { const c = at(x, z); if (c.kind !== 'pipe') throw new Error(`${L.name}: fixed ${x},${z} is not a pipe`); c.fixed = true; }
-  for (const [x, z] of L.yuzu || []) { const c = at(x, z); if (c.kind !== 'pipe') throw new Error(`${L.name}: yuzu ${x},${z} is not a pipe`); c.yuzu = true; }
-  const src = cells.find(c => c.kind === 'src');
-  if (!src) throw new Error(`${L.name}: no source`);
-  for (const [dx, dz, bit, opp] of DIRS) {
-    const n = at(src.x + dx, src.z + dz);
-    if (n && ((n.kind === 'pipe' && n.sol & opp) || n.kind === 'tub')) src.sol = src.mask |= bit;
+  const pipeAt = (x, z, what) => { const c = at(x, z); if (!c || c.kind !== 'pipe') throw new Error(`${L.name}: ${what} ${x},${z} is not a pipe`); return c; };
+  for (const [x, z] of L.fixed || []) pipeAt(x, z, 'fixed').fixed = true;
+  for (const [x, z] of L.yuzu || []) pipeAt(x, z, 'yuzu').yuzu = true;
+  for (const [x, z] of L.gate || []) { const c = pipeAt(x, z, 'gate'); c.gate = true; c.fixed = true; }
+  for (const [x, z] of L.scale || []) pipeAt(x, z, 'scale').scale = true;
+  for (const [x, z] of L.leaves || []) pipeAt(x, z, 'leaves').leaf = true;
+  for (const [x, z] of L.ice || []) pipeAt(x, z, 'ice').ice = true;
+  for (const [x, z] of L.cloud || []) pipeAt(x, z, 'cloud').cloud = true;
+  for (const [x, z, alt] of L.lift || []) { const c = pipeAt(x, z, 'lift'); c.lift = true; c.fixed = true; c.hAlt = alt; }
+  (L.links || []).forEach((pair, id) => pair.forEach(([x, z]) => { const c = pipeAt(x, z, 'link'); if (c.fixed) throw new Error(`${L.name}: linked pipe is fixed`); c.link = id; }));
+  const srcs = cells.filter(c => c.kind === 'src');
+  if (!srcs.length) throw new Error(`${L.name}: no spring`);
+  for (const s of srcs) for (const [dx, dz, bit, opp] of DIRS) {
+    const n = at(s.x + dx, s.z + dz);
+    if (n && n.kind === 'pipe' && n.sol & opp) s.sol = s.mask |= bit;
   }
-  return { name: L.name, tip: L.tip, W: Wd, H, cells, at, src };
+  const colored = srcs.some(s => s.color === 'b');
+  const lv = { name: L.name, W: Wd, H, cells, at, srcs, colored, guide: L.guide || null };
+  resetState(lv);
+  return lv;
 }
 
-// water spreads from the spring; it never climbs to a higher cell
-function flow(lv) {
-  const wet = new Set([lv.src]), queue = [lv.src], links = [], spills = [];
-  while (queue.length) {
-    const c = queue.shift();
-    for (const [dx, dz, bit, opp] of DIRS) {
-      if (!(c.mask & bit)) continue;
-      const n = lv.at(c.x + dx, c.z + dz);
-      const accepts = n && ((n.kind === 'pipe' && n.mask & opp) || n.kind === 'tub' || n.kind === 'cat');
-      if (!accepts || n.h > c.h) { spills.push({ c, bit, blocked: !!(accepts && n.h > c.h) }); continue; }
-      links.push({ a: c, b: n, bit });
-      if (!wet.has(n)) { wet.add(n); if (n.kind === 'pipe') queue.push(n); }
+// solved arrangement with every gimmick in its starting state (ice frozen, leaves on, lifts where they belong)
+function resetState(lv) {
+  for (const c of lv.cells) { c.mask = c.sol; c.k = 0; c.h = c.hSol; c.leafOn = !!c.leaf; c.iceOn = !!c.ice; }
+}
+const passable = (c, gateOpen) => c.kind === 'pipe' && !c.leafOn && !c.iceOn && (!c.gate || gateOpen);
+
+function flowOnce(lv, gateOpen) {
+  const wet = new Map(), links = [], touches = new Set();
+  for (const s of lv.srcs) {
+    const color = s.color;
+    const mark = c => { if (!wet.has(c)) wet.set(c, new Set()); const had = wet.get(c).has(color); wet.get(c).add(color); return !had; };
+    mark(s);
+    const queue = [s];
+    while (queue.length) {
+      const c = queue.shift();
+      for (const [dx, dz, bit, opp] of DIRS) {
+        if (!(c.mask & bit)) continue;
+        const n = lv.at(c.x + dx, c.z + dz);
+        if (!n) continue;
+        const reach = n.h <= c.h || c.cloud;          // water never climbs, except out of a cloud
+        if (!reach) continue;
+        touches.add(n);
+        const accepts = n.kind === 'tub' || n.kind === 'cat' || (n.kind === 'pipe' && passable(n, gateOpen) && n.mask & opp);
+        if (!accepts) continue;
+        links.push({ a: c, b: n, bit, color });
+        if (mark(n) && n.kind === 'pipe') queue.push(n);
+      }
     }
   }
+  return { wet, links, touches };
+}
+
+function flow(lv) {
+  const scales = lv.cells.filter(c => c.scale);
+  let r = flowOnce(lv, false), gateOpen = false;
+  if (scales.length && scales.every(c => r.wet.has(c))) { gateOpen = true; r = flowOnce(lv, true); }
   const tubs = lv.cells.filter(c => c.kind === 'tub');
+  const happy = t => { const w = r.wet.get(t); if (!w) return false; return t.want ? w.size === 1 && w.has(t.want) : (!lv.colored || w.size === 1); };
+  const filled = tubs.filter(happy);
   return {
-    wet, links, spills,
-    filled: tubs.filter(t => wet.has(t)),
-    tubs,
-    wetCats: lv.cells.filter(c => c.kind === 'cat' && wet.has(c)),
-    yuzu: lv.cells.filter(c => c.yuzu && wet.has(c)),
-    solved: tubs.every(t => wet.has(t)) && !lv.cells.some(c => c.kind === 'cat' && wet.has(c)),
+    ...r, gateOpen, tubs, filled,
+    mixed: tubs.filter(t => r.wet.has(t) && !happy(t)),
+    wetCats: lv.cells.filter(c => c.kind === 'cat' && r.wet.has(c)),
+    yuzu: lv.cells.filter(c => c.yuzu && r.wet.has(c)),
+    solved: filled.length === tubs.length && !lv.cells.some(c => c.kind === 'cat' && r.wet.has(c)),
   };
+}
+
+// thaw any ice the water has reached, until nothing changes; returns the final flow and what melted
+function settle(lv) {
+  const thawed = [];
+  for (;;) {
+    const f = flow(lv);
+    const melt = lv.cells.filter(c => c.iceOn && f.touches.has(c));
+    if (!melt.length) return { f, thawed };
+    for (const c of melt) { c.iceOn = false; thawed.push(c); }
+  }
 }
 
 function mulberry32(a) {
   return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 const rotatable = c => c.kind === 'pipe' && !c.fixed && c.sol !== 15;
-function stepsTo(c) { let m = c.mask, k = 0; while (m !== c.sol) { m = rotCW(m); k++; } return k; }
-
-// same scramble every time for a level, so records stay comparable
-function scramble(lv, index) {
-  for (let seed = index * 7919 + 17; ; seed++) {
-    const rnd = mulberry32(seed);
-    for (const c of lv.cells) if (rotatable(c)) { c.mask = c.sol; c.k = Math.floor(rnd() * 4); for (let i = 0; i < c.k; i++) c.mask = rotCW(c.mask); }
-    const par = lv.cells.filter(rotatable).reduce((s, c) => s + stepsTo(c), 0);
-    if (!flow(lv).solved && par >= Math.min(3, lv.cells.filter(rotatable).length)) return par;
+// tiles that turn together: a link group, or a single pipe
+function units(lv) {
+  const groups = new Map(), out = [];
+  for (const c of lv.cells) {
+    if (!rotatable(c)) continue;
+    if (c.link === undefined) out.push([c]);
+    else { if (!groups.has(c.link)) { groups.set(c.link, []); out.push(groups.get(c.link)); } groups.get(c.link).push(c); }
   }
+  return out;
+}
+function stepsTo(unit) { for (let k = 0; k < 4; k++) if (unit.every(c => rotBy(c.mask, k) === c.sol)) return k; return 0; }
+
+// same scramble every time for a stage, so records stay comparable; returns par (taps for the intended solution)
+function scramble(lv, index) {
+  const us = units(lv);
+  for (let seed = index * 7919 + 17; seed < index * 7919 + 17 + 5000; seed++) {
+    const rnd = mulberry32(seed);
+    resetState(lv);
+    for (const u of us) {
+      let k = Math.floor(rnd() * 4);
+      // ice and leaves only mean something if the tile underneath also needs turning
+      if (u.some(c => c.ice || c.leaf)) while (rotBy(u[0].sol, k) === u[0].sol) k = (k + 1) % 4;
+      for (const c of u) { c.k = k; c.mask = rotBy(c.sol, k); }
+    }
+    for (const c of lv.cells) if (c.lift) c.h = c.hAlt;
+    const par = us.reduce((s, u) => s + stepsTo(u), 0) + lv.cells.filter(c => c.leaf).length + lv.cells.filter(c => c.lift).length;
+    const solvedAtStart = settle(lv).f.solved;
+    for (const c of lv.cells) c.iceOn = !!c.ice;          // settle may have thawed; the player starts frozen
+    if (!solvedAtStart && par >= Math.min(3, us.length)) return par;
+  }
+  throw new Error(`${lv.name}: no scramble leaves the stage unsolved`);
+}
+
+// the intended route from a spring to a target, used by the coach and by hints
+function solutionPath(lv, target) {
+  const prev = new Map(), q = [];
+  for (const s of lv.srcs) { prev.set(s, null); q.push(s); }
+  while (q.length) {
+    const c = q.shift();
+    if (c === target) break;
+    for (const [dx, dz, bit, opp] of DIRS) {
+      if (!(c.sol & bit)) continue;
+      const n = lv.at(c.x + dx, c.z + dz);
+      if (!n || prev.has(n)) continue;
+      if (!(n.kind === 'tub' || n.kind === 'cat' || (n.kind === 'pipe' && n.sol & opp))) continue;
+      if (n.kind === 'tub' && n.want && n.want !== srcColorOf(lv, c, prev)) continue;
+      prev.set(n, c); if (n.kind === 'pipe') q.push(n); else if (n === target) { q.length = 0; break; }
+    }
+  }
+  if (!prev.has(target)) return [];
+  const path = [];
+  for (let c = target; c; c = prev.get(c)) path.unshift(c);
+  return path;
+}
+function srcColorOf(lv, c, prev) { while (prev.get(c)) c = prev.get(c); return c.color; }
+// what still needs doing on a cell before it carries water the intended way
+function needsWork(c) {
+  if (c.kind !== 'pipe') return null;
+  if (c.leafOn) return 'clear';
+  if (c.lift && c.h !== c.hSol) return 'height';
+  if (c.iceOn && c.mask !== c.sol) return 'thaw';
+  if (rotatable(c) && c.mask !== c.sol) return 'sol';
+  return null;
 }
 // LOGIC END
 
-// ten villages of ten stages; stages 11-100 come from a generator and are stored here as data
+// ten villages of ten stages; each village after the first brings one new gimmick, taught by its first stage
 const CHAPTERS = [
-  { name: '온천 마을 입구', grass: [0x8fd19a, 0x84c890], tree: [0x6dbb7a, 0x58a86a], kind: 'mixed', sky: ['#bfe6df', '#fde3cd'] },
-  { name: '유자 언덕', grass: [0xb5d97f, 0xa9cf73], tree: [0x7cbf5f, 0x6aae55], kind: 'yuzu', sky: ['#d7ecc0', '#ffe2bd'],
-    tip: '새 마을에 왔어요. 지금까지 배운 걸 천천히 써 보세요.' },
-  { name: '대나무 숲', grass: [0x8ccf9f, 0x7fc492], tree: [0x7ac27c, 0x5fae68], kind: 'bamboo', sky: ['#c4e8d4', '#eef3d2'],
-    tip: '욕조가 늘어나요. 원천에서 가까운 갈림길부터 정리해 보세요.' },
-  { name: '단풍 계곡', grass: [0xc2d68a, 0xb7cc7f], tree: [0xf08a4b, 0xe0603f], kind: 'round', sky: ['#f6dcc0', '#fde9d9'],
-    tip: '섬이 길어졌어요. 섬을 돌려 뒤쪽 물길도 살펴보세요.' },
-  { name: '눈꽃 고개', grass: [0xf2f6f7, 0xe6eef0], tree: [0x5e9e86, 0x4f8c76], kind: 'snow', sky: ['#cfe2ef', '#eef2f6'],
-    tip: '높낮이가 커졌어요. 물이 올라갈 수 없는 언덕을 먼저 찾아보세요.' },
-  { name: '벚꽃 강가', grass: [0x9fd6a0, 0x93cc95], tree: [0xffb7cb, 0xff9fb8], kind: 'round', sky: ['#f8d9e3', '#fdeee0'],
-    tip: '고양이가 늘었어요. 고양이 옆 갈림길은 방향을 꼭 확인해요.' },
-  { name: '반딧불 늪', grass: [0x7fbf98, 0x72b38b], tree: [0x4f9a77, 0x3f8a68], kind: 'mixed', sky: ['#cdd7ef', '#f7dccf'],
-    tip: '가짜 물길이 많아요. 원천에서 이어지는 길만 따라가 보세요.' },
-  { name: '구름 정원', grass: [0xa6dcc0, 0x9ad2b4], tree: [0xb9e3c6, 0x9fd6b0], kind: 'round', sky: ['#d8e9f7', '#f4ecf7'],
-    tip: '넓은 정원이에요. 막히면 힌트를 써도 괜찮아요.' },
-  { name: '별빛 산마루', grass: [0x8ec9a6, 0x82bd9a], tree: [0x5b9f8c, 0x4a8e7b], kind: 'pine', sky: ['#c9d3ee', '#efe3f1'],
-    tip: '욕조 다섯 개가 기다려요. 한 마리씩 차근차근 채워요.' },
-  { name: '하늘 온천', grass: [0xbfe39a, 0xb2d98d], tree: [0xffc85c, 0xf2b13f], kind: 'yuzu', sky: ['#ffe7b8', '#fde3cd'],
-    tip: '마지막 마을이에요. 온 세상 카피바라가 기다리고 있어요.' },
+  { name: '온천 마을 입구', gim: null,      grass: [0x8fd19a, 0x84c890], tree: [0x6dbb7a, 0x58a86a], kind: 'mixed',  sky: ['#bfe6df', '#fde3cd'] },
+  { name: '유자 언덕',     gim: 'gate',    grass: [0xb5d97f, 0xa9cf73], tree: [0x7cbf5f, 0x6aae55], kind: 'yuzu',   sky: ['#d7ecc0', '#ffe2bd'] },
+  { name: '대나무 숲',     gim: 'link',    grass: [0x8ccf9f, 0x7fc492], tree: [0x7ac27c, 0x5fae68], kind: 'bamboo', sky: ['#c4e8d4', '#eef3d2'] },
+  { name: '단풍 계곡',     gim: 'leaves',  grass: [0xc2d68a, 0xb7cc7f], tree: [0xf08a4b, 0xe0603f], kind: 'round',  sky: ['#f6dcc0', '#fde9d9'] },
+  { name: '눈꽃 고개',     gim: 'ice',     grass: [0xf2f6f7, 0xe6eef0], tree: [0x5e9e86, 0x4f8c76], kind: 'snow',   sky: ['#cfe2ef', '#eef2f6'] },
+  { name: '벚꽃 강가',     gim: 'lift',    grass: [0x9fd6a0, 0x93cc95], tree: [0xffb7cb, 0xff9fb8], kind: 'round',  sky: ['#f8d9e3', '#fdeee0'] },
+  { name: '반딧불 늪',     gim: 'springs', grass: [0x7fbf98, 0x72b38b], tree: [0x4f9a77, 0x3f8a68], kind: 'mixed',  sky: ['#cdd7ef', '#f7dccf'] },
+  { name: '구름 정원',     gim: 'cloud',   grass: [0xa6dcc0, 0x9ad2b4], tree: [0xb9e3c6, 0x9fd6b0], kind: 'round',  sky: ['#d8e9f7', '#f4ecf7'] },
+  { name: '별빛 산마루',   gim: 'colors',  grass: [0x8ec9a6, 0x82bd9a], tree: [0x5b9f8c, 0x4a8e7b], kind: 'pine',   sky: ['#c9d3ee', '#efe3f1'] },
+  { name: '하늘 온천',     gim: 'all',     grass: [0xbfe39a, 0xb2d98d], tree: [0xffc85c, 0xf2b13f], kind: 'yuzu',   sky: ['#ffe7b8', '#fde3cd'] },
 ];
-const GENERATED = [{"tiles":["...S","..┌│","...│","..T┘","┌..C"],"heights":["3333","3332","2222","1111","1111"],"fixed":[[3,3]]},{"tiles":[".│C.",".├S.","T┴..","..┌┌"],"heights":["3333","3333","3333","3333"],"fixed":[[1,1]],"yuzu":[[1,0]]},{"tiles":["┌T│..","└─┴S.","....─",".....","....."],"heights":["10122","12233","12233","12233","12233"],"yuzu":[[2,0]]},{"tiles":["...S.","..┌┤.","..┤T.","..T─.",".┌..."],"heights":["33333","33233","33233","33233","33333"],"fixed":[[2,2]]},{"tiles":["┌S...","┤....","└─┬T┌","C....","....."],"heights":["33333","22323","11102","11222","11223"]},{"tiles":["..┌S.","..├┐.","..││.","─.TT.","....."],"heights":["33333","33323","33212","33213","33323"]},{"tiles":["T├─T","├S.─","└.┌.","...."],"heights":["1211","2322","2333","3333"],"yuzu":[[0,2]]},{"tiles":["┌T..","└─S.",".││.","..└T","...."],"heights":["3333","3333","3333","3322","3333"]},{"tiles":[".┌.├┐",".T┬┤S","..T.┴","....."],"heights":["21233","21233","22233","33333"]},{"tiles":["┌.S┬T","┴..└┐",".C┌─┘","..T..","....."],"heights":["33333","33333","33122","32122","32333"],"fixed":[[3,1]]},{"tiles":["...┬S","...T│","...T┤",".....","...┌─"],"heights":["33333","33332","33322","33333","33333"]},{"tiles":["┬S...","└─┐..","CT┤..",".┴T..","│...."],"heights":["23333","22233","21233","22233","22233"],"fixed":[[1,1]]},{"tiles":["│....","..S┌T","..├┤.",".┴││C","...T."],"heights":["33321","33310","33221","33222","33222"],"fixed":[[2,2]],"yuzu":[[2,3]]},{"tiles":["...CT","..S┬┘",".┌.├─","...│.","..│└T"],"heights":["33321","33321","33211","33200","33200"],"fixed":[[3,3]],"yuzu":[[4,2]]},{"tiles":[".┌┐C.",".│S..",".└┬┐.","│.TT.","...┌."],"heights":["33333","32323","32212","32112","33222"]},{"tiles":["...┴S",".┌.┌┘","─.├┘.","T┴┤..",".CT.."],"heights":["33333","33333","33333","22233","32233"],"fixed":[[3,1]]},{"tiles":["S┌T..","┤│.┌.","├┘...","└T...","C...┴"],"heights":["31111","22322","22333","22333","22333"]},{"tiles":["S┐...","┤│.┌.","│TC┌.","└─┐┌.","..T.."],"heights":["33333","32333","32333","33333","33233"],"fixed":[[1,1]]},{"tiles":[".....","T│S..","├.├┘.","└─┤┴.","T─┘C."],"heights":["22333","22333","23333","33333","11233"],"yuzu":[[3,2]]},{"tiles":["..S┬┤",".C┌┘│","..│┌┘",".┌TT.","..┴.┌"],"heights":["33332","33332","33301","33301","33322"]},{"tiles":[".....","...S.","...│T","─┴.└┤","...C│","..│T┘"],"heights":["03333","33333","33322","33322","33322","33322"],"fixed":[[4,3]]},{"tiles":["┌..C│","┴.S┬┤","...T├","....┤","....T","...│."],"heights":["33333","33333","33323","33332","33332","33333"],"fixed":[[4,1]],"yuzu":[[4,0]]},{"tiles":[".....","S│...","├T...","├┬T.─","│....","└─T.."],"heights":["33333","33333","33333","22233","11123","00012"],"fixed":[[1,3]]},{"tiles":["....S","....│","┌T─┴┤","..┌─┘","..TC.","┌│..."],"heights":["21233","21123","11122","11111","21111","32232"],"fixed":[[2,2]]},{"tiles":["┌..T.","C┌S┴┘",".┤┌.C","T┘...",".....","....┌"],"heights":["33322","33333","32333","01233","01233","01233"],"fixed":[[3,1]],"yuzu":[[4,1]]},{"tiles":["C┌─┬┐C","T┘T┘S.","......","...┌..","─...┴."],"heights":["112233","002233","001233","001233","111233"],"fixed":[[1,0]]},{"tiles":[".S....","T├....","├┤C...","│├.│.┌","TT.│.."],"heights":["333333","233333","223333","223333","223333"],"fixed":[[1,1]]},{"tiles":["┌─S┬┐.","│...├.","┴─┤.T.","CCT.┌┌","..┌..."],"heights":["123333","011233","000123","000123","000223"],"fixed":[[4,1]]},{"tiles":[".S┬┴T","C┌┘C.","┬┤.┌.","T├.┌.",".T..─","....."],"heights":["33322","33333","33333","33333","33333","33333"],"fixed":[[1,2]]},{"tiles":["....S┤","..T└┬┘","┌C├┬┘C",".T┘└T.",".┌..┴."],"heights":["222332","222222","222223","112223","222223"],"fixed":[[3,2]],"yuzu":[[3,1]]},{"tiles":["S───T.","│C.┌.─","├T....","└┬T...","┌└....",".....┴"],"heights":["322222","233333","212333","221333","222333","223333"],"fixed":[[3,0],[2,0]],"yuzu":[[1,4]]},{"tiles":[".┌S─T.","┌─┘.┌.","└┐....","C├─T..",".T....","┴....┌"],"heights":["223323","122333","002233","100023","101123","111123"],"fixed":[[1,1],[2,1]]},{"tiles":["S┐.C..","┤└┴┐..","├─TT.┌","└T...┌","......","..┌..."],"heights":["333222","322122","211122","211122","222222","222222"],"fixed":[[1,1]]},{"tiles":["C┌┴┐C.","┌TT┤S│","...├┘.","...┴T.","......","─....."],"heights":["111122","101133","111223","111112","112222","112333"],"fixed":[[4,2]]},{"tiles":["C┌┐.─.","┌┘S.┌.","│.....","├T....","├T....","└─T..┴"],"heights":["333333","223333","223333","223333","222333","221233"],"fixed":[[1,0]]},{"tiles":["┌.S─┬┬",".C├TT│","..│T┬┘","...┌.C",".┌....","......"],"heights":["333333","333222","333222","333333","333333","333333"],"fixed":[[4,2],[5,2]],"yuzu":[[2,2]]},{"tiles":[".T┬┬┴S","C┌┘T..",".├....",".│C...",".└T┴│.","..┌..."],"heights":["222223","222133","223233","222233","210123","222223"],"fixed":[[2,1],[3,0]]},{"tiles":[".C┌┬S.","├┐T│C.","│└┬┴..","T.T...","─.....",".─...─"],"heights":["232333","232333","233333","222333","222333","222333"],"fixed":[[1,1],[3,1]]},{"tiles":[".T┬─S.",".C├┐┌┐",".┌T└┘│",".....┤","....│T",".┌...."],"heights":["112233","111111","110110","111110","111110","111111"],"fixed":[[3,1]]},{"tiles":["┌S....","│├....","┤├─...","│└┐C..","TC├T.┴","┌T┤.┴."],"heights":["333333","333333","333333","322333","322123","322223"],"fixed":[[0,3]],"yuzu":[[2,2]]},{"tiles":["T┬┬S─┤","┌┤..CT","│└....","TC....","┴..┴..","..┴┴.."],"heights":["233333","233333","123333","123333","133333","123333"],"fixed":[[4,0],[1,1]],"yuzu":[[1,2]]},{"tiles":["┌..┌┬.","│.┌S│.","C┌┘.├T","T┘─.T.",".C│...","......"],"heights":["333333","333333","333333","233333","233333","233333"],"fixed":[[4,2],[4,1]]},{"tiles":["T───┤C","T┬┐S┴T","..├┤C.","...└..","┌┌....","┌│...."],"heights":["333333","112333","112233","112233","112233","112233"],"fixed":[[2,2],[1,0]],"yuzu":[[3,3]]},{"tiles":["S┬TC..","┤├─┐.┴","T├T└─T","┴.│.C.","......",".....│"],"heights":["322222","322112","322110","333221","333333","333333"],"fixed":[[0,1],[1,2]]},{"tiles":[".C.│.┴","S─┐C..","├T│...","├┐T│..","│T.┴..","├─T..."],"heights":["333333","333333","222333","112333","101233","000123"],"fixed":[[1,5],[0,3]]},{"tiles":["..┌.┌T",".C.├S┐","T─┐│.│","─C├┤├┘","....│.","┌.─.T."],"heights":["223333","223333","222333","333333","333333","333333"],"fixed":[[3,2]]},{"tiles":["┬──┤├T","│S─┴┴─","└┐C...","C├┐...","┌TT..┴","..┌┌.."],"heights":["222221","133222","001222","000122","000122","011122"],"fixed":[[0,1],[2,3]],"yuzu":[[5,1]]},{"tiles":["┴T┤T┴S","C┌┴──┤",".├─T┌┘",".└.T┘┌",".C.┴..","......"],"heights":["112233","222233","221133","222333","222333","333333"],"fixed":[[5,1],[3,1]],"yuzu":[[1,3]]},{"tiles":["┴S─┬─┐","┌┘┌┘T┘","TC└┬..",".C┌┤.┴","..TT..","....─."],"heights":["332111","330000","320000","320000","320000","332121"],"fixed":[[3,3],[2,1]]},{"tiles":[".┌S.─┴","┌┴┬T..","│.└┬T┌","│├─┘..","│TCC.┌","T....."],"heights":["333333","233323","222212","122233","122233","012333"],"fixed":[[3,3]]},{"tiles":["S─T....","┴┬┐C...","┌┘└T...","├.C...│","T┴─....","┌┌....."],"heights":["3333333","2112333","0111233","0111333","0111233","0111333"],"fixed":[[1,2],[1,0]]},{"tiles":["┌....S","..C..├",".T───┤","..CT┬┤","..┌..T","┌...┌.","....┌."],"heights":["101233","101222","101222","111122","111122","111122","111122"],"fixed":[[4,3]]},{"tiles":["....T.","S─┤C├T",".C└┐│─","..│└┴T","┴┴....","......","..┌..."],"heights":["333212","333211","332211","332111","333222","333333","333333"],"fixed":[[3,3]]},{"tiles":["┴.┴S┴T","...└─┐","...CT┤",".─.T.│",".│.└─┘","....C.","...─.."],"heights":["333333","333211","333211","333111","332111","332232","332233"],"fixed":[[3,4],[5,2]]},{"tiles":["T..┌S│.","├┴─┘C..","├TC....","│......","├┘┌..┌.","└┬T.─.."],"heights":["2333333","3333333","3333333","3333333","3333333","3333333"],"fixed":[[3,0],[0,1]],"yuzu":[[1,4]]},{"tiles":["T┬─┬...","┌S.│┌..","└─T└┐..",".C..└T.","..┌.C┴.","┌....┌."],"heights":["2222222","3322222","3212113","3322112","3333222","3333333"],"fixed":[[0,1]]},{"tiles":["S┬┬┤TT","..││││","...└┴┤","...CCT","┴....─","..─...","┴...┴."],"heights":["332100","332100","333111","333321","333332","333333","333333"],"fixed":[[2,0]],"yuzu":[[2,1]]},{"tiles":["...┌─┐","┬─S┘.│","└─┬┐CT","┌CT├..","┌..T..","┌....─",".....─"],"heights":["233110","233210","111120","111132","111123","111123","111123"],"fixed":[[3,0]]},{"tiles":[".┌..S┬.",".│..┤TC","..┴C├─┐","┴...┘T├","..┌.T├┘","....┴┴T"],"heights":["0333333","0333333","0333222","0333101","0332000","0321000"],"fixed":[[5,4]],"yuzu":[[4,3]]},{"tiles":["┌─┬S│.","├┐└──T","│└─┬┐C","└┐T┘│C",".T.T┘.","─┴....","....│."],"heights":["333322","333211","333333","333333","322123","333223","333333"],"fixed":[[3,2],[0,1]]},{"tiles":["┌┌─S...","C│.│...","C└┬─┐..","..T┌┤C.",".T┬┤T..","...T...","─...│.."],"heights":["2233333","2222333","2100023","2100013","1000012","1100012","1111112"],"fixed":[[3,3],[1,1]]},{"tiles":[".....S┤","│.┌T┬┤T",".│─..└┐",".....C├","...T┬.│","...C│││","...T┴─┴"],"heights":["0222232","2222231","3322232","3323222","3322222","3332222","3332222"],"fixed":[[6,0],[4,1]]},{"tiles":[".┬─S──┐",".T....┤","..┌.C┌┘","...C.│C",".│┴┌┬┴T",".─.TT..","......."],"heights":["2223211","3233321","3333211","3332100","3320000","3320000","3332112"],"fixed":[[1,0],[5,3]]},{"tiles":["┌┐C..┌T","S└┬T┌┘.","└┐└─┤C.","T┤C.T..","┌...┴..","...┌─..","......."],"heights":["2222110","3222111","3211112","2221113","3332223","3333333","3333333"],"fixed":[[1,3],[5,0]]},{"tiles":["..┌─┐S┤",".C└┐T│T","...├─┴┐","..T┘..┤","─....┌│","│┌...C├",".....T┘"],"heights":["0000033","1000023","1010010","1000110","1001120","1011120","2011100"],"fixed":[[6,3],[3,3]]},{"tiles":[".S┬┬.T.","..│└┬┘.","┌.│T┘C.",".┬┴┬...",".T┌┘...",".C└┐┌.┌","..┌T│.."],"heights":["3321000","3320000","3220000","2111111","3111111","3100112","3220222"],"fixed":[[5,1],[2,5]]},{"tiles":[".....┌┐","─.S─┬┤├",".┌.C.│├","....C│T","....C└┐",".┌.┌T┬┘","....T┴T"],"heights":["3333332","3333332","3333332","3333331","3333333","3332012","3333111"],"fixed":[[6,2],[5,1]]},{"tiles":["....S─┐",".┌.T┌┬┤","..C└┤│T","..C┌┤TT","..─.│┌┴",".─.C└┘.","......┌"],"heights":["0233333","0000112","0000112","1000110","3211100","3221111","3222223"],"fixed":[[4,4],[5,5]],"yuzu":[[3,3]]},{"tiles":["┌─┬┴S..","│┌┤T┴..","││.CC..","│├─┬T.┌","T.┌┴T..","...C.│─",".┴....."],"heights":["1233333","1222233","1223333","1222123","1222123","1333223","1233333"],"fixed":[[1,0],[3,3]],"yuzu":[[2,4]]},{"tiles":["─C┌┬─┴S","..│└┐┌┤","C┌┤┌┤T└",".T│T..┴",".C│..┌┌","..└┬┤..","....T.┴"],"heights":["2223333","2223333","2223333","2223333","3323333","3322233","3332123"],"fixed":[[5,0],[2,0]],"yuzu":[[6,2]]},{"tiles":["S.┬─T.─","│.│C..┌","├┴┴┐C..","TT┬┴T..",".│.C.┌.","...┌..│","......."],"heights":["3333333","3333333","3333333","3222233","3333333","3333333","3333333"],"fixed":[[2,1],[3,3]]},{"tiles":["T┐.....","┬S┤C─..","│.T┴...","├.┌....","├─TC.─.","├─┬──T┴","└...C.."],"heights":["2333333","3323333","3323333","2223333","2222223","1110002","1111112"],"fixed":[[0,2],[0,3]],"yuzu":[[0,6]]},{"tiles":["┌──┴┬─┤","S──┐└TT","│C.┴┬┬┐","│...┤.T","...C├.│",".│..T..",".....┌."],"heights":["3333333","3332333","3331100","3332100","3332111","3332111","3333222"],"fixed":[[1,0],[4,4],[4,0]]},{"tiles":["T┬┬SCC┴","┌┤.└┬┐C",".T..┤├┐",".┌..T.│","..┌...│",".┴│..┌┤",".─...T."],"heights":["3333333","3333222","3333121","3333011","3333221","3333311","3333202"],"fixed":[[4,2],[5,5],[6,2]],"yuzu":[[0,1]]},{"tiles":["T┌..┴..","┴┬S┌...","C└┐.T..",".T┼┤│┌.",".T┘├┘C.","..┌┘C.│",".T┴...."],"heights":["1233333","2333233","2222123","3222223","3222223","3212223","2013333"],"fixed":[[3,3],[1,2]]},{"tiles":["┌─┬─┬S.","TT┤.T└┐",".┴│..C├","..T..C├","..┌.C┌┴","...─┴T.","...─..."],"heights":["2222233","2122133","2223233","2212233","2223333","2223333","2223333"],"fixed":[[2,2],[6,2]]},{"tiles":[".T┌┤├┬┐",".┴┘S│.T","┴..┴┤C.",".T┬┬┴.─","└┬┤.C..","CT.┌..│","│┌....."],"heights":["0022000","0013000","0012111","1111123","1112223","2113333","2223333"],"fixed":[[2,3],[4,1]],"yuzu":[[0,4]]},{"tiles":["┴.....┌","....C├S","┴....┴┐",".┌..┬─┤","T.T─│CT","└─┤T┤C.",".T┴─┴.─"],"heights":["0003333","1223333","1112333","1112233","1101233","1111123","1111123"],"fixed":[[4,5],[2,6]]},{"tiles":["┴T.C.──","┌┤S┬...","│└┤├──┐","└┐TT.CT","─└┐....",".C├..─.",".┌└T..."],"heights":["3333333","3332222","3332111","2222211","2112222","2111222","2111223"],"fixed":[[2,4],[2,2],[5,2]]},{"tiles":["├─┴─┴S.","│┌┬─┐├┘","T│├┐└┴┐",".TT└TC│","...C│T┘","┌..─..C",".┴...┴."],"heights":["2222333","2222222","2122222","1021012","1122111","1122222","2222222"],"fixed":[[4,1],[0,1],[6,4]],"yuzu":[[6,1]]},{"tiles":[".C│C.S┐",".┬┬┐.C│","T┤T│┌┬┘","..┌┴┤T.","..T│T│.","......─","...│.┌."],"heights":["1122333","1122233","1122222","1222222","1222223","1222223","1333333"],"fixed":[[3,2],[2,1],[1,1]]},{"tiles":["T──┴S.┴","...┬┤C.",".C┌┤T.─","C┌┤....","T│├T..┌","└┤└T┌..","┌..┌..."],"heights":["2233333","3332333","3322333","2222333","2211233","2210123","2221123"],"fixed":[[2,3],[1,0],[4,1]]},{"tiles":["SC....┴","├┬─┬T┴.","││.┤.┌.","T.┌┴┐┌.",".C│.└T┴",".T┴┴T┴.","..C...."],"heights":["3322233","2211123","1221123","0100012","1200001","1000001","1111111"],"fixed":[[1,1],[2,5],[4,3]],"yuzu":[[1,2]]},{"tiles":["─.....┌","┌S.T.C.","T│├┼┐┌T","└┴┤│└┘.","┌.┤└T..",".C└T...","..C..──"],"heights":["3332222","2320121","0200000","0110000","1100011","1200011","2211111"],"fixed":[[2,2],[1,2],[4,3]]},{"tiles":["..T.S┌.",".─└┬┴..",".┌C│.│.","..C├┐┴.","...T│┌T","┴.T┐├┤C","..T┴┘.─"],"heights":["2223333","3333333","3333333","3332222","3332222","3322223","3322223"],"fixed":[[4,4],[3,3]]},{"tiles":[".S│├┤.│",".┴─┘├┴T","┴TT┬┴┐T",".┴─┘C├┤",".┌C┴C│.",".....T┌","......."],"heights":["3321111","3332000","2000000","1000000","2111000","2222100","2222211"],"fixed":[[1,1],[5,4]]},{"tiles":["S..┌...","┴┤...CC","┌┴T.T┬┐","┴┬┬──┤T",".│└T.└.",".TC─.─┴","...┌.┌┌"],"heights":["3333333","2223222","2213000","2222210","2210111","2221111","2332233"],"fixed":[[5,2],[1,1]],"yuzu":[[5,4]]},{"tiles":["T┤S..┴┌","C├┴..┴│","┬┤T┐T..","│└┐├┘..","└T└┤C..","C..┤┴─│","...┴─T."],"heights":["1133333","2222233","2211023","2221012","2111112","2211112","2211102"],"fixed":[[3,3],[4,6],[3,6]]},{"tiles":["├┬┴┬┐S.","││CT├┤┌","│T.│T.─","│.─....","│CT...┌","│┴│T...","└─┴┤C.."],"heights":["0012333","0012333","0022233","0012233","0002233","0000233","0000123"],"fixed":[[1,6],[4,1],[0,3]]},{"tiles":["TCS┬T..","├┬┘└┐C.","│T┌┐├T.","├─┘│...","│.┬┘C─┌","..│┌│.┴","..T┴..."],"heights":["3333222","3333333","3333333","3333333","3323333","3312333","3212333"],"fixed":[[0,3],[3,3]],"yuzu":[[0,4]]}];
-GENERATED.forEach((L, n) => {
-  const stage = 11 + n, ch = CHAPTERS[Math.floor((stage - 1) / 10)];
-  LEVELS.push({ ...L, name: `${ch.name} ${(stage - 1) % 10 + 1}`, tip: (stage - 1) % 10 === 0 ? ch.tip : '' });
-});
+const GENERATED = [{"stage":12,"tiles":["│....","├S..│","│....","├T...","└...."],"heights":["33333","33333","33333","33333","33333"],"fixed":[[0,3]],"yuzu":[[0,4]],"gate":[[0,2]],"scale":[[0,0]]},{"stage":13,"tiles":["┌┬┐..","S││..","..│..","..T..","...┌."],"heights":["33333","33233","32123","33123","33333"],"fixed":[[2,1]],"gate":[[2,0]],"scale":[[1,1]]},{"stage":14,"tiles":["S┐T┐.",".┴─┴┘","..C..",".....",".─..."],"heights":["33222","32222","33333","33333","33333"],"fixed":[[1,1]],"gate":[[3,0]],"scale":[[4,1]]},{"stage":15,"tiles":["┌T│..","├─┴S.","└.C..","┌....","....."],"heights":["10122","12233","12233","12233","12233"],"fixed":[[1,1]],"yuzu":[[2,0]],"gate":[[0,0]],"scale":[[0,2]]},{"stage":16,"tiles":[".└┬S.","..├┐.","..││.","..TT.","...│."],"heights":["33333","33323","33212","33213","33323"],"fixed":[[2,0]],"gate":[[3,2]],"scale":[[1,0]]},{"stage":17,"tiles":["..┴..","..C│S","..┌┴┤","..T.T","....."],"heights":["03333","33333","33333","33222","33333"],"gate":[[2,2]],"scale":[[3,1]]},{"stage":18,"tiles":[".T└┬┐","T┴─┘S","....┴",".....","....."],"heights":["11233","12333","12333","12333","12333"],"gate":[[2,1]],"scale":[[2,0]]},{"stage":19,"tiles":[".┌S.┴","└┤C..","┬┤...","┤....","└─T.."],"heights":["32333","22333","11233","00123","00013"],"gate":[[0,4]],"scale":[[0,1]]},{"stage":20,"tiles":["..S┬T","...┴┐",".C┌┬┴","..T└.","...┌."],"heights":["33333","33333","33122","32122","32333"],"fixed":[[3,0]],"gate":[[2,2]],"scale":[[3,3]]},{"stage":22,"tiles":["┬S...","└─┐..","CT┤..",".┴T..","│...."],"heights":["23333","22233","21233","22233","22233"],"links":[[[2,1],[2,2]]]},{"stage":23,"tiles":["..│..","..S┌T","┌─├┤.","..││C","...T."],"heights":["33321","33310","33221","33222","33222"],"yuzu":[[2,3]],"links":[[[2,0],[2,2]]]},{"stage":24,"tiles":["..S┬┤",".C┌┘│","..│┌┘",".┌TT.","..┴.┌"],"heights":["33332","33332","33301","33301","33322"],"fixed":[[4,0]],"links":[[[4,1],[3,2]]]},{"stage":25,"tiles":["S┌T..","┤│.┌.","├┘...","└T...","C...┴"],"heights":["31111","22322","22333","22333","22333"],"fixed":[[0,2]],"links":[[[0,3],[0,1]],[[1,0],[1,1]]]},{"stage":26,"tiles":[".┌┐C.",".│S..",".└┬┐.","│.TT.","...┌."],"heights":["33333","32323","32212","32112","33222"],"links":[[[1,1],[2,0]],[[1,0],[1,2]]]},{"stage":27,"tiles":["...┴S",".┌.┌┘","─.├┘.","T┴┤..",".CT.."],"heights":["33333","33333","33333","22233","32233"],"fixed":[[3,1]],"links":[[[1,1],[4,1]],[[0,2],[3,2]]]},{"stage":28,"tiles":[".│...","T.S..","├.├┘┌","└─┤..","T─┘C."],"heights":["22333","22333","23333","33333","11233"],"yuzu":[[3,2]],"links":[[[0,2],[1,3]],[[1,0],[2,2]]]},{"stage":29,"tiles":[".└┬S┐","─C│─T","..│..","..T..","....┌"],"heights":["33333","33222","33123","32123","33333"],"yuzu":[[1,0]],"links":[[[0,1],[2,1]],[[4,0],[3,1]],[[2,0],[2,2]]]},{"stage":30,"tiles":["S┐...","┤│.┌.","│TC┌.","└─┐┌.","..T.."],"heights":["33333","32333","32333","33333","33233"],"fixed":[[1,0]],"links":[[[1,1],[2,3]],[[1,3],[3,3]],[[3,1],[0,1]]]},{"stage":32,"tiles":[".....","...S.","...│T","─┴.└┤","...C│","..│T┘"],"heights":["03333","33333","33322","33322","33322","33322"],"fixed":[[3,3]],"leaves":[[4,3],[1,3]]},{"stage":33,"tiles":["...C│","..S┬┤","...T├","...C│","│...T","─.│.."],"heights":["33333","33333","33323","33332","33332","33333"],"fixed":[[4,3]],"yuzu":[[4,0]],"leaves":[[4,1],[4,2],[2,5]]},{"stage":34,"tiles":["...T.","C┌S┴┘",".┤│..","T┘...","..┌..","....┌"],"heights":["33322","33333","32333","01233","01233","01233"],"yuzu":[[4,1]],"leaves":[[1,2],[1,3],[3,1],[4,5]]},{"stage":35,"tiles":[".S┬┴T","─┌┘C.","┌┤...","T│...",".T..┌","┌...."],"heights":["33322","33333","33333","33333","33333","33333"],"fixed":[[2,1]],"leaves":[[1,3],[1,1],[0,5]]},{"stage":36,"tiles":["....S","....│","┌T─┴┤","..┌─┘","..TC.","┌│..."],"heights":["21233","21123","11122","11111","21111","32232"],"leaves":[[4,3],[2,2],[3,2],[0,2]]},{"stage":37,"tiles":["..─.S┤","┴.T└┬┘",".C├┬┘.",".T┘└T.",".....┌"],"heights":["222332","222222","222223","112223","222223"],"yuzu":[[3,1]],"leaves":[[4,1],[5,4]]},{"stage":38,"tiles":[".S....","T├....","├┤C...","││C│.┌","TT.│.."],"heights":["333333","233333","223333","223333","223333"],"leaves":[[1,1],[0,3],[5,3]]},{"stage":39,"tiles":[".....","S│...","├T...","├─T.─","│C...","└─T.."],"heights":["33333","33333","33333","22233","11123","00012"],"leaves":[[1,3],[0,3],[0,5],[4,3]]},{"stage":40,"tiles":["┌─S┬┐.","│...├.","┴─┤.T.","CCT.┌┌","..┌..."],"heights":["123333","011233","000123","000123","000223"],"fixed":[[1,2]],"leaves":[[4,1],[1,0],[0,1],[0,0],[2,4]]},{"stage":42,"tiles":["┴...┌T","..C┌S.","T┌┬┘.┌","├┘..│.","......","......"],"heights":["012333","012333","012333","001333","001233","001233"],"fixed":[[3,2]],"ice":[[2,2]]},{"stage":43,"tiles":["S.....","│.....","├T...│","└┬T..│","C└....",".┌...."],"heights":["333333","233333","112333","111333","111233","112233"],"fixed":[[0,1]],"yuzu":[[1,4]],"ice":[[0,3],[1,3]]},{"stage":44,"tiles":["C┌┐.─.","┌┘S...","│.....","├T....","├T....","└─T..┴"],"heights":["333333","223333","223333","223333","222333","221233"],"fixed":[[0,2]],"ice":[[1,0]]},{"stage":45,"tiles":[".T┬─S.","..└┐┌┐","┌.C└┘│",".....┤","...│.T","......"],"heights":["112232","211000","221000","222100","222210","222221"],"fixed":[[5,1]],"ice":[[2,1],[3,1]]},{"stage":46,"tiles":["┌┬┬T.│","│.└──S","T.C.C.","......","......","...┴.."],"heights":["001123","012223","012223","012223","012223","012223"],"fixed":[[3,1]],"ice":[[2,0],[1,0],[4,1]]},{"stage":47,"tiles":["┌S....","│├.─..","┤├─...","│└┐│..","TC├T..",".T┤..."],"heights":["333333","333333","333333","322333","322123","322223"],"fixed":[[2,4]],"yuzu":[[2,2]],"ice":[[0,2]]},{"stage":48,"tiles":[".CS─T┌","┌─┘...","└┐....","C│....",".T....","┴....┌"],"heights":["123323","122333","001233","001333","002333","001233"],"fixed":[[0,2]],"ice":[[3,0],[1,2],[1,1]]},{"stage":49,"tiles":["..S─┬┬",".C├TT│",".C│T┬┘","......","......","..┌..─"],"heights":["333333","333222","333222","333333","333333","333333"],"fixed":[[4,0]],"yuzu":[[2,2]],"ice":[[4,2],[5,2]]},{"stage":50,"tiles":[".T┬┬┴S","C┌┘T..",".├....",".│C...",".└T┴│.","......"],"heights":["222223","222133","223233","222233","210123","222223"],"fixed":[[1,3]],"ice":[[1,4],[3,0]]},{"stage":52,"tiles":["....T┐","..S─┐├","...C├┤",".┌..TT","┴.....","...┌.."],"heights":["333200","333220","333210","333210","333322","333333"],"fixed":[[3,1]],"lift":[[5,0,1]]},{"stage":53,"tiles":[".┌...│","....S.","┌..C│T","..T┬┴┤","....┌┘","..┴.TC"],"heights":["003333","022332","211321","211122","311101","211101"],"fixed":[[3,3]],"lift":[[5,4,3],[4,4,2]]},{"stage":54,"tiles":["S┐....","┤└T.─.","├──T┌.","└┐....","┌│.┌..","C├T..."],"heights":["333333","333233","221023","222123","222223","222223"],"fixed":[[0,2]],"lift":[[2,2,3]]},{"stage":55,"tiles":["S┬TC─.","│└─┐C.","T..└─T","┴.....","...┴..","┌....."],"heights":["322222","211111","221111","223222","223333","223333"],"fixed":[[3,1]],"lift":[[1,1,3],[3,2,0]]},{"stage":56,"tiles":[".T┐T─S","└┬┴─┬┴",".┴┬T.C",".C....","....│.","...┌.┴"],"heights":["222223","222333","211123","322223","333333","333333"],"fixed":[[4,0]],"yuzu":[[0,1]],"lift":[[3,1,4]]},{"stage":57,"tiles":[".S─┬─┐","┌┤┌┘T┘","T.└┐..","─┴C│─.","...T..","......"],"heights":["333333","232222","122122","122122","121012","122112"],"fixed":[[1,1]],"lift":[[3,1,4],[2,1,3]]},{"stage":58,"tiles":["┬┐...─","│└┐.S─","TC├┴┤.","..┤T┘C",".┴││..","..T..."],"heights":["001122","001233","022223","011223","011223","010223"],"fixed":[[0,1]],"lift":[[1,0,1]]},{"stage":59,"tiles":["T──┴┐.","T─┐S┘.","..├┴┬.","─...├T","..┴.└.","┌┌..C."],"heights":["111122","233333","233333","233333","233333","233333"],"fixed":[[2,1]],"yuzu":[[4,4]],"lift":[[1,1,4],[2,0,2]]},{"stage":60,"tiles":["┌┴┴┐┌T","│S┬┴┘C","└┐├T..","T┘└...",".C.─.┴","─..┌.."],"heights":["112211","133211","002222","001222","001222","001233"],"fixed":[[2,1]],"yuzu":[[2,3]],"lift":[[4,0,2],[1,3,1]]},{"stage":62,"tiles":["┌─S┐C.","T..││S","..T┤.│","....T┘","....┌.",".....┴"],"heights":["223333","233333","233333","233323","233333","233333"],"fixed":[[0,0]]},{"stage":63,"tiles":[".T.C.S","S┘.┌─┘","┤┴.│..","│C.T..","T....┌",".┴...."],"heights":["333333","333223","333223","333223","233333","233333"],"fixed":[[4,1],[1,1]]},{"stage":64,"tiles":["S┐...┴S","┤│C..─├","T└T...┤",".....┌┘","..┴..│.",".....T."],"heights":["3333333","2333333","1323333","1333333","2333323","2333323"],"fixed":[[6,3]]},{"stage":65,"tiles":[".C...┌┐","S┐│.T┘S","┌┘..T─┘","T...┴.C","....┴..","......."],"heights":["3333333","3233333","1133223","1123333","1123333","1123333"],"fixed":[[6,0],[6,2]]},{"stage":66,"tiles":["┌..S┐T","S┬┬.├┴","..├T└┐","..└.C│",".┌...T","─.┌..."],"heights":["333331","333332","333333","333333","333333","333333"],"fixed":[[4,2],[2,1]],"yuzu":[[2,3]]},{"stage":67,"tiles":[".S┴....","C├┐...S",".T└┐.┬┤","...TT┘T","┌┴.....","..─...."],"heights":["3333333","3333333","3333222","3333112","3333222","3333333"],"fixed":[[6,2],[1,1]]},{"stage":68,"tiles":[".│..S┐.","S─┐..│T",".C├┘.├┤","..├T┌T.","..T....","...┌..."],"heights":["3333321","3223210","3211111","3200111","3201111","3323223"],"fixed":[[6,2],[5,2]],"yuzu":[[3,2]]},{"stage":69,"tiles":["S..C┌┤","│T..S├","└┴..│├","─C..T├","...┴T┘",".....┴"],"heights":["333333","223333","223333","223333","223333","223333"],"fixed":[[0,1]]},{"stage":70,"tiles":["..┌...","S.┌S.┌","│.│└T.","├┘│...","│C└T─.","T.C.┌."],"heights":["333333","333333","332223","222233","122123","122233"],"fixed":[[2,1]],"yuzu":[[1,3]]},{"stage":72,"tiles":[".─.CS.",".─T┬┤.","│T┬┘│.","...T┤C","....┤.","┌...T.","......"],"heights":["321233","321233","222223","222223","222223","222223","223333"],"fixed":[[4,1],[4,3]],"cloud":[[3,2]]},{"stage":73,"tiles":["T┬──┬..",".├┐┌┴─S","C││T│C.","..│....","┴.T┌...","......─"],"heights":["1111123","1112223","2112223","3201233","3211233","3332233"],"fixed":[[1,1]],"yuzu":[[1,2]],"cloud":[[2,3]]},{"stage":74,"tiles":["┴S┬─T..","..┤.┌..",".T│....","C├┴┐...",".T┌┘...",".┌TC..."],"heights":["3333333","3323333","3233333","3332333","3312333","3322333"],"fixed":[[3,3],[2,0]],"cloud":[[2,1],[2,4]]},{"stage":75,"tiles":["┌..T...","┴.S┴┬┐┴","..C┌┤│C","...T.├.","..┌..└┐","...T┴┬┘"],"heights":["3333333","3333333","3332323","3333212","3332211","3321111"],"fixed":[[4,1]],"cloud":[[3,2],[5,4]]},{"stage":76,"tiles":["..T┴S┴┐","...T┌─┤",".┌C├┤CT","....├..","....┤┌T","...┌└┘─"],"heights":["3333332","3321001","3321001","3332112","3332111","3332112"],"fixed":[[3,2]],"cloud":[[4,2]]},{"stage":77,"tiles":["..─S─┬┐","....│T│",".....┌┤","..C.┌│T",".T┬┬┬┘.","...T.C."],"heights":["3333333","3333333","3333323","3333222","2221123","2222223"],"fixed":[[6,1]],"cloud":[[4,4],[3,4]]},{"stage":78,"tiles":["├┐S....","T││....","┌┴┘C...","││C.┌..","├─T.T..","├──┴┘.┌"],"heights":["1233333","2233333","3333333","3333333","3223233","3333233"],"fixed":[[0,4]],"cloud":[[1,4],[0,0]]},{"stage":79,"tiles":["C┌───S","T┤C.┬┤","T┤..T└",".│..┌─","││┴...",".└T...","......"],"heights":["322333","322223","333212","333322","323333","323333","333333"],"fixed":[[2,0],[3,0]],"yuzu":[[5,2]],"cloud":[[1,1],[1,5]]},{"stage":80,"tiles":["..┬T.S.","..├┐C├.","┌┌.├─┴┬","..T┤T┐│","...└─┤│","..┴C..T"],"heights":["0000233","2112333","2222232","2222122","2231112","2232321"],"fixed":[[3,1]],"cloud":[[5,4]]},{"stage":82,"tiles":["Q.C├─┤S","┤│.│.└┤","┤..A..A","B......",".......","│......","......─"],"heights":["3333333","2332333","1222333","1222333","2222333","2222333","2333333"],"fixed":[[3,0]]},{"stage":83,"tiles":["Q...S┐.","├.┌..┤C","├B...├A",".─..C│┌",".┴┌..└A","......."],"heights":["3333333","2233323","2123321","2333321","2333321","2333332"],"fixed":[[5,2],[0,1]]},{"stage":84,"tiles":["┌Q..┬┐C","┌├..S│.",".│.C│A.",".B┌.│..","..│.A..","...┌..."],"heights":["3333222","3233323","3233323","3233333","3333333","3333333"],"fixed":[[5,0]]},{"stage":85,"tiles":[".┬─S.┌Q",".├A..┌┘","├┘.─.└┐","│C....┤","A..─..B",".┌..┌.."],"heights":["2233333","1223333","0123321","0123321","0123321","0123333"],"fixed":[[6,3],[2,0]]},{"stage":86,"tiles":[".┌┬┐┌┬S",".Q.││A.","┴.B┘│C.","...CA..","┌..┌...","....┌│."],"heights":["2222333","3321323","3311333","3322333","3333333","3333333"],"fixed":[[3,2]]},{"stage":87,"tiles":["...A.┌Q","┌┴S┘.B│","│A.C─┌┘","└┘..B┘.","...─...","..┌...."],"heights":["3333333","3333322","3333201","3332001","3333211","3333322"],"fixed":[[0,1]]},{"stage":88,"tiles":[".─├┬─┐.","Q.│SCA.","│.┴┬...","├─BA...","B─....┴",".─.│..."],"heights":["3212211","3213211","3211222","2111233","1111233","2332333"],"fixed":[[0,3],[3,2]]},{"stage":89,"tiles":["Q┐...A│","┌┤┌S├┴┐","B│.└┘.A","B┘C....",".C.....","......┴"],"heights":["3333101","3333000","2332100","3333211","3333322","3333333"],"fixed":[[5,1]]},{"stage":90,"tiles":[".│QC┌S.",".┬┘.│..","B┤.C│─.","┌└BA┤┌┌","....A..","......."],"heights":["3333333","3333233","3322233","3211123","3321123","3332223"],"fixed":[[4,0]]},{"stage":91,"tiles":["...┌...","..S....","┌.├T..┌","..├┬.T.",".T┘├─┘C","..┌└─T.","...C..."],"heights":["3333333","3333333","3332333","2221102","1111101","1111112","1111112"],"fixed":[[3,5]],"cloud":[[4,5]],"lift":[[5,4,2]]},{"stage":92,"tiles":["┌S─┴──┤","├┐┌┬┐CT","│├┘.T..","TTC....","......┌","┴......","....┴┌┴"],"heights":["2333322","1100012","1100012","1011112","1111112","1122222","1123333"],"fixed":[[5,0],[1,2]],"lift":[[2,2,2]],"ice":[[0,2]]},{"stage":93,"tiles":["Q┬┘S.CA",".┤.└┬─┤","C├┐.└A│","B┘B...│","......A",".│.....","┌│...┌."],"heights":["3333333","3333333","3333213","3323323","3333333","3333333","3333333"],"fixed":[[1,0]],"gate":[[1,3]],"scale":[[2,0]],"lift":[[6,2,2],[4,2,4]]},{"stage":94,"tiles":["..TT┴┐C","..┴┬┬S┌","...││├T",".┌└┤T└.",".┴.└┐..","┴..CT..","..┌│..."],"heights":["2222333","3222232","3232221","3222222","3222233","3222133","3233233"],"fixed":[[3,1],[5,2]],"yuzu":[[2,3]],"gate":[[3,2]],"scale":[[5,3]],"ice":[[3,4]]},{"stage":95,"tiles":["│T┬─T┌┐","..┴S─┘│",".C┌┤┌─┤","...TT┌┘","┌.┌..└┐",".┌...CT","┌......"],"heights":["1121132","1123332","1123012","1123011","1123100","1123310","1123321"],"fixed":[[3,2],[4,1]],"gate":[[5,0]],"scale":[[2,2]],"lift":[[4,2,2]]},{"stage":96,"tiles":["S─┬.T─┐","├T├──┬┤","├.└.C││","├┬.┴..T",".├T┴.─.","─...┴..","......┌"],"heights":["3321000","2110000","1111100","1111211","2222222","3333333","3333333"],"fixed":[[5,0]],"yuzu":[[5,2]],"gate":[[3,1]],"scale":[[2,2]],"cloud":[[6,2],[1,3]]},{"stage":97,"tiles":["┌┬┬Q├┬S","B│└.│└┐",".┴┐.│┌┴","B─┘┌A├A",".CC..A┌","....─.│",".....┴."],"heights":["2333123","2222021","3221001","2221001","2222111","2222222","2222233"],"fixed":[[2,3],[2,2]],"gate":[[5,1]],"scale":[[2,1]],"cloud":[[5,3]]},{"stage":98,"tiles":["T┌S....","│T│T...","└┬┴┴...","┌┘CC...","├┬...││","TT...┌.","..│...─"],"heights":["1333333","1323333","1222333","2222333","2222333","2222333","3333333"],"fixed":[[0,3],[1,4]],"cloud":[[3,2],[0,2]],"leaves":[[1,3],[2,1],[0,4],[6,6]]},{"stage":99,"tiles":[".┴..C├┬","T.T┬─┤S","│├┬┤C├.","└┘│..T.",".CT.┴..","...┌...","....│.."],"heights":["0011112","0011113","0000112","0000001","0001122","0001133","0002233"],"fixed":[[3,1]],"leaves":[[6,0],[2,3],[0,2],[4,4]],"links":[[[0,3],[1,3]],[[5,0],[4,1]]]},{"stage":100,"tiles":["..┴.┬S┬","....TC│","│C└┬─┬┴","...│.├┬",".┌.TT┘│","│..T┬T│","...C└─┘"],"heights":["0333333","0333333","2222233","2222232","2222231","3210111","3212111"],"fixed":[[6,1]],"yuzu":[[2,2]],"lift":[[4,2,4],[6,4,3]],"leaves":[[6,3],[4,0],[6,2],[0,5]]}];
+const genByStage = new Map(GENERATED.map(L => [L.stage, L]));
+for (let stage = 11; stage <= 100; stage++) {
+  const ch = CHAPTERS[Math.floor((stage - 1) / 10)];
+  const base = TUTORIALS[stage] || genByStage.get(stage);
+  if (!base) throw new Error(`stage ${stage} is missing`);
+  const L = { ...base, name: `${ch.name} ${(stage - 1) % 10 + 1}` };
+  if (stage === 91) { L.intro = 'all'; L.tip = '마지막 마을이에요. 막히면 힌트를 써도 괜찮아요.'; }
+  LEVELS.push(L);
+}
 const chapterOf = i => Math.floor(i / 10);
+
+// gimmick cards: shown once when a gimmick first appears, and kept in the guide book
+const ART = {
+  pipe: (d, w = 7) => `<path d="${d}" stroke="#c28d55" stroke-width="${w + 4}" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" stroke="#63c9dc" stroke-width="${w - 3}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  spring: (x, y, c = '#63c9dc') => `<circle cx="${x}" cy="${y}" r="9" fill="#8a948f"/><circle cx="${x}" cy="${y}" r="6" fill="${c}"/>`,
+  tub: (x, y, ring = '#8e5f34') => `<ellipse cx="${x}" cy="${y + 4}" rx="11" ry="7" fill="#c28d55"/><ellipse cx="${x}" cy="${y + 1}" rx="10" ry="4.5" fill="#63c9dc" stroke="${ring}" stroke-width="2"/><circle cx="${x}" cy="${y - 5}" r="5.5" fill="#b07a4f"/><circle cx="${x}" cy="${y - 11}" r="2.6" fill="#ffa236"/>`,
+};
+const GIMMICKS = {
+  goal: { name: '온천물 잇기', text: '원천에서 솟은 온천물을 물길로 이어 모든 욕조를 채우면 클리어예요. 나무 물길을 누르면 90°씩 돌아가요.',
+    art: ART.spring(14, 16) + ART.pipe('M14 25 V44 H40') + ART.tub(50, 44) },
+  height: { name: '물은 아래로', text: '물은 같은 높이나 낮은 칸으로만 흘러요. 계단을 내려갈 땐 폭포가 되고, 위로는 올라가지 못해요.',
+    art: '<path d="M4 22 H28 V36 H46 V50 H60 V60 H4Z" fill="#8fd19a"/><path d="M4 22 H28 V36 H46 V50 H60" fill="none" stroke="#6aa877" stroke-width="2"/><rect x="26" y="22" width="5" height="14" rx="2" fill="#63c9dc"/><rect x="44" y="36" width="5" height="14" rx="2" fill="#63c9dc"/><path d="M14 16 v-10 m-4 4 l4 -4 l4 4" stroke="#e3584b" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M9 6 l10 10" stroke="#e3584b" stroke-width="3" stroke-linecap="round"/>' },
+  cat: { name: '낮잠 자는 고양이', text: '고양이에게 물이 닿으면 깜짝 놀라 깨요. 고양이가 젖어 있으면 클리어할 수 없어요.',
+    art: '<path d="M16 22 l4 -10 l6 8 h12 l6 -8 l4 10" fill="#f2b46d"/><ellipse cx="32" cy="34" rx="18" ry="14" fill="#f2b46d"/><path d="M24 33 q3 -3 6 0 M34 33 q3 -3 6 0" stroke="#2b2420" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M50 44 q4 6 0 10 q-4 -4 0 -10z" fill="#63c9dc"/><path d="M44 42 l14 14" stroke="#e3584b" stroke-width="3" stroke-linecap="round"/>' },
+  stone: { name: '돌 물길', text: '회색 돌 물길은 돌릴 수 없어요. 주변 나무 물길을 돌려 방향을 맞춰 주세요.',
+    art: '<path d="M8 32 H56" stroke="#a7b0ab" stroke-width="16" stroke-linecap="round"/><path d="M8 32 H56" stroke="#63c9dc" stroke-width="5" stroke-linecap="round"/><rect x="24" y="8" width="16" height="13" rx="3" fill="#7f8984"/><path d="M27 8 v-3 a5 5 0 0 1 10 0 v3" stroke="#7f8984" stroke-width="3" fill="none"/>' },
+  yuzu: { name: '유자 상자', text: '유자 상자로 물을 지나가게 하면 유자를 얻어요. 모으지 않아도 클리어할 수 있어요.',
+    art: ART.pipe('M6 40 H58') + '<circle cx="24" cy="28" r="8" fill="#ffa236"/><circle cx="40" cy="28" r="8" fill="#ffa236"/><circle cx="32" cy="18" r="8" fill="#ffa236"/><ellipse cx="38" cy="10" rx="5" ry="2.4" fill="#5fae6b" transform="rotate(-25 38 10)"/>' },
+  gate: { name: '유자 수문', text: '노란 깃발이 달린 수문은 닫혀 있어요. 같은 깃발의 유자 저울에 물이 닿으면 열려요.',
+    art: ART.pipe('M6 44 H58') + '<rect x="27" y="22" width="10" height="28" rx="2" fill="#9b6a3c"/><path d="M44 10 v26" stroke="#7f8984" stroke-width="2.5"/><path d="M44 10 l12 5 l-12 5z" fill="#ffc83d"/><circle cx="14" cy="22" r="7" fill="#ffa236"/><path d="M8 30 h12" stroke="#9b6a3c" stroke-width="3"/>' },
+  link: { name: '짝꿍 물길', text: '같은 색 끈으로 묶인 물길은 하나를 돌리면 짝꿍도 함께 돌아요.',
+    art: ART.pipe('M6 18 H26') + ART.pipe('M38 46 V60 M38 46 H58') + '<path d="M16 18 C 16 40, 40 24, 40 46" stroke="#ff8fb1" stroke-width="3" fill="none" stroke-dasharray="4 3"/><circle cx="16" cy="18" r="5" fill="none" stroke="#ff8fb1" stroke-width="3"/><circle cx="40" cy="46" r="5" fill="none" stroke="#ff8fb1" stroke-width="3"/>' },
+  leaves: { name: '낙엽 더미', text: '낙엽에 덮인 물길은 모양이 안 보이고 물도 막혀요. 눌러서 치워 주세요. 치우는 것도 한 번 누른 걸로 세요.',
+    art: '<ellipse cx="22" cy="38" rx="12" ry="6" fill="#e9824a" transform="rotate(-15 22 38)"/><ellipse cx="38" cy="36" rx="13" ry="6" fill="#d9603b" transform="rotate(20 38 36)"/><ellipse cx="30" cy="28" rx="12" ry="6" fill="#f2b33d"/><ellipse cx="44" cy="46" rx="10" ry="5" fill="#c9573a"/><ellipse cx="18" cy="48" rx="10" ry="5" fill="#f2b33d" transform="rotate(10 18 48)"/><path d="M50 14 q6 2 8 8" stroke="#27474d" stroke-width="2.5" fill="none" stroke-linecap="round"/>' },
+  ice: { name: '얼어붙은 물길', text: '얼음 속 물길은 돌릴 수 없고 물도 막혀요. 따끈한 물이 바로 옆까지 오면 사르르 녹아요.',
+    art: ART.pipe('M10 34 H54') + '<rect x="12" y="16" width="40" height="34" rx="6" fill="#cfefff" fill-opacity=".8" stroke="#9fd3ec" stroke-width="2"/><path d="M20 24 l6 0 M22 30 l3 0" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M50 10 l4 -4 M56 14 l4 0 M46 6 l0 -4" stroke="#ffa236" stroke-width="2.5" stroke-linecap="round"/>' },
+  lift: { name: '높낮이 블록', text: '화살표가 있는 보라 블록은 누를 때마다 한 칸 올라가거나 내려가요. 물이 흐를 수 있는 높이로 맞춰 주세요.',
+    art: '<rect x="16" y="26" width="32" height="32" rx="4" fill="#c9b8f0"/><rect x="16" y="22" width="32" height="8" rx="3" fill="#b3a0e6"/><path d="M32 4 v14 m-6 -8 l6 -6 l6 6" stroke="#6b55b8" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 52 v-14 m-6 8 l6 6 l6 -6" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' },
+  springs: { name: '두 원천', text: '원천이 두 개예요. 어느 원천의 물이든 욕조를 채울 수 있어요. 가까운 원천부터 이어 보세요.',
+    art: ART.spring(14, 14) + ART.spring(50, 14) + ART.pipe('M14 23 V40') + ART.pipe('M50 23 V40') + ART.tub(14, 48) + ART.tub(50, 48) },
+  cloud: { name: '구름 물길', text: '구름에 감싸인 물길은 물을 한 칸 높은 곳으로도 올려 보내요.',
+    art: '<path d="M4 48 H30 V36 H60 V60 H4Z" fill="#a6dcc0"/>' + ART.pipe('M10 44 H22 V30 H54', 6) + '<circle cx="18" cy="44" r="7" fill="#fff"/><circle cx="26" cy="42" r="8" fill="#fff"/><circle cx="22" cy="36" r="7" fill="#fff"/><path d="M40 22 v-12 m-5 5 l5 -5 l5 5" stroke="#5aa6c9" stroke-width="3" fill="none" stroke-linecap="round"/>' },
+  colors: { name: '유자탕과 쑥탕', text: '주황 원천은 유자탕, 초록 원천은 쑥탕이에요. 욕조 테두리와 같은 색 물만 보내고, 두 물이 섞이지 않게 해 주세요.',
+    art: ART.spring(14, 14, '#ffb547') + ART.spring(50, 14, '#8fd46f') + ART.tub(14, 46, '#ffb547') + ART.tub(50, 46, '#8fd46f') + '<path d="M14 24 V34" stroke="#ffb547" stroke-width="5" stroke-linecap="round"/><path d="M50 24 V34" stroke="#8fd46f" stroke-width="5" stroke-linecap="round"/>' },
+  all: { name: '하늘 온천', text: '지금까지 만난 물길이 한꺼번에 나와요. 천천히, 막히면 힌트를 써도 괜찮아요.',
+    art: '<path d="M32 6 l7 15 l16 2 l-12 11 l3 16 l-14 -8 l-14 8 l3 -16 l-12 -11 l16 -2z" fill="#ffc83d" stroke="#dd7a0e" stroke-width="2" stroke-linejoin="round"/>' },
+};
+const GIMMICK_ORDER = ['goal', 'height', 'cat', 'stone', 'yuzu', 'gate', 'link', 'leaves', 'ice', 'lift', 'springs', 'cloud', 'colors', 'all'];
+
 
 const $ = s => document.querySelector(s);
 const TAU = Math.PI * 2;
@@ -392,14 +617,20 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // every project on starone99.github.io shares one localStorage, so keys carry a game prefix
 const SAVE_KEY = 'capy-onsen:v1';
 function loadSave() {
-  try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (s && typeof s.levels === 'object') return s;
-  } catch (e) { /* storage unavailable: play without records */ }
-  return { levels: {}, sound: true };
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage unavailable: play without records */ }
+  if (!s || typeof s.levels !== 'object') s = { levels: {}, sound: true };
+  if (s.stages !== 2) {
+    // stages 11-100 were redesigned around new gimmicks; their old records describe different puzzles
+    for (const k of Object.keys(s.levels)) if (+k >= 10) delete s.levels[k];
+    s.stages = 2;
+  }
+  if (typeof s.seen !== 'object' || !s.seen) s.seen = {};
+  return s;
 }
 const save = loadSave();
 function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* storage unavailable */ } }
+writeSave();
 const isCleared = i => !!save.levels[i];
 const isOpen = i => i === 0 || isCleared(i - 1);
 function flowersFor(moves, par) {
@@ -410,7 +641,7 @@ function flowersFor(moves, par) {
 
 // ---------- sound (synthesized, starts after the first tap) ----------
 const Sound = {
-  ctx: null, master: null,
+  ctx: null, master: null, noiseBuf: null,
   ensure() {
     if (!save.sound) return null;
     if (!this.ctx) {
@@ -418,6 +649,10 @@ const Sound = {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain(); this.master.gain.value = 0.9; this.master.connect(this.ctx.destination);
+      const len = this.ctx.sampleRate;
+      this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.ambient();
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -429,14 +664,30 @@ const Sound = {
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t);
     if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.05);
   },
-  tok() { this.tone(640, 0.08, { type: 'triangle', gain: 0.14, to: 420 }); },
-  bloop() { this.tone(330, 0.2, { gain: 0.09, to: 660 }); },
-  capy(d = 0) { this.tone(200, 0.32, { gain: 0.16, to: 150, delay: d }); this.tone(400, 0.18, { gain: 0.05, to: 300, delay: d + 0.02 }); },
-  meow() { this.tone(820, 0.28, { gain: 0.08, to: 520 }); this.tone(980, 0.12, { gain: 0.04, to: 700, delay: 0.05 }); },
+  noise(dur, { freq = 1000, q = 1, gain = 0.1, delay = 0, type = 'bandpass' } = {}) {
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = ctx.currentTime + delay;
+    const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  },
+  tok() { this.tone(620, 0.07, { type: 'triangle', gain: 0.1, to: 430 }); this.noise(0.03, { freq: 3000, q: 2, gain: 0.04 }); },
+  drop(d = 0) { this.tone(480, 0.12, { gain: 0.07, to: 1050, delay: d }); },
+  splash(d = 0) { this.noise(0.45, { freq: 900, q: 0.7, gain: 0.07, delay: d, type: 'lowpass' }); },
+  capy(d = 0) { this.splash(d); this.tone(200, 0.32, { gain: 0.15, to: 150, delay: d + 0.15 }); this.tone(400, 0.18, { gain: 0.04, to: 300, delay: d + 0.17 }); },
+  meow(d = 0) { this.tone(820, 0.28, { gain: 0.08, to: 520, delay: d }); this.tone(980, 0.12, { gain: 0.04, to: 700, delay: d + 0.05 }); },
   bonk() { this.tone(160, 0.12, { type: 'triangle', gain: 0.12, to: 120 }); },
+  rustle() { this.noise(0.35, { freq: 2600, q: 0.8, gain: 0.16 }); this.noise(0.25, { freq: 1300, q: 1, gain: 0.09, delay: 0.09 }); },
+  melt(d = 0) { this.noise(0.6, { freq: 5200, q: 0.6, gain: 0.05, delay: d }); [1568, 1319, 1047].forEach((f, i) => this.tone(f, 0.22, { gain: 0.045, delay: d + i * 0.08 })); },
+  gate(open) { this.tone(open ? 220 : 330, 0.35, { type: 'triangle', gain: 0.09, to: open ? 330 : 220 }); this.tone(open ? 330 : 247, 0.3, { type: 'triangle', gain: 0.06, to: open ? 440 : 196, delay: 0.14 }); },
+  ding(d = 0) { this.tone(1760, 0.7, { gain: 0.06, delay: d }); this.tone(2637, 0.4, { gain: 0.025, delay: d + 0.01 }); },
+  lift(up) { this.tone(up ? 300 : 520, 0.25, { gain: 0.09, to: up ? 520 : 300 }); this.noise(0.2, { freq: 700, q: 1, gain: 0.04 }); },
+  mix(d = 0) { this.tone(330, 0.3, { type: 'square', gain: 0.025, to: 311, delay: d }); this.tone(349, 0.3, { type: 'square', gain: 0.025, to: 330, delay: d }); },
   chime() { [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.7, { gain: 0.07, delay: i * 0.11 })); },
   ambient() {
     const ctx = this.ctx, len = ctx.sampleRate * 3, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
@@ -444,14 +695,14 @@ const Sound = {
     for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.2; }
     const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
-    const g = ctx.createGain(); g.gain.value = 0.05;
+    const g = ctx.createGain(); g.gain.value = 0.045;
     src.connect(lp); lp.connect(g); g.connect(this.master); src.start();
     const bird = () => {
       if (save.sound && this.ctx.state === 'running') {
         const base = 2200 + Math.random() * 900;
-        for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) this.tone(base, 0.09, { gain: 0.025, to: base * 1.25, delay: i * 0.13 });
+        for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) this.tone(base, 0.09, { gain: 0.022, to: base * 1.25, delay: i * 0.13 });
       }
-      setTimeout(bird, 5000 + Math.random() * 9000);
+      setTimeout(bird, 6000 + Math.random() * 9000);
     };
     setTimeout(bird, 3000);
   },
@@ -622,89 +873,159 @@ function makeTrough(mask, stone) {
   return { g, water };
 }
 
+// ---------- gimmick models ----------
+const LINK_COLORS = [0xff8fb1, 0xa98bff, 0x4fc3b0];
+const WATER = { plain: 0x63c9dc, a: 0xffb547, b: 0x8fd46f, mixed: 0xb3a27e };
+const iceMat = new THREE.MeshPhongMaterial({ color: 0xd6f2ff, transparent: true, opacity: 0.62, shininess: 120, specular: 0xffffff });
+function makeFlag(color) {
+  const g = new THREE.Group();
+  const pole = cyl(0.015, 0.015, 0.5, M(COLORS.stoneDark), 6); pole.position.y = 0.25; g.add(pole);
+  const cloth = mesh(new THREE.ConeGeometry(0.09, 0.2, 3), M(color)); cloth.rotation.z = -Math.PI / 2; cloth.position.set(0.1, 0.43, 0); g.add(cloth);
+  return g;
+}
+function makeScale() {
+  const g = new THREE.Group();
+  const post = cyl(0.03, 0.04, 0.22, M(COLORS.woodDark), 8); post.position.y = 0.11; g.add(post);
+  const plate = cyl(0.13, 0.11, 0.03, M(COLORS.wood), 14); plate.position.y = 0.23; g.add(plate);
+  const y = sph(0.09, M(COLORS.yuzu)); y.position.y = 0.32; g.add(y);
+  const leaf = sph(0.5, M(COLORS.leaf)); leaf.scale.set(0.08, 0.02, 0.04); leaf.position.set(0.03, 0.41, 0); g.add(leaf);
+  g.userData.fruit = y;
+  return g;
+}
+function makeLeafPile(rnd) {
+  const g = new THREE.Group(), cols = [0xe9824a, 0xd9603b, 0xf2b33d, 0xc9573a];
+  for (let i = 0; i < 11; i++) {
+    const l = sph(0.5, M(cols[i % cols.length]), { cast: true });
+    l.scale.set(0.2, 0.05, 0.12);
+    l.position.set((rnd() - 0.5) * 0.6, 0.12 + rnd() * 0.12, (rnd() - 0.5) * 0.6);
+    l.rotation.set(rnd() * 0.5, rnd() * TAU, rnd() * 0.5);
+    g.add(l);
+  }
+  return g;
+}
+function makeCloudRing() {
+  const g = new THREE.Group();
+  for (let i = 0; i < 7; i++) {
+    const a = i / 7 * TAU;
+    const p = sph(0.11 + (i % 2) * 0.03, M(COLORS.cloud), { cast: false });
+    p.position.set(Math.cos(a) * 0.4, 0.16 + (i % 3) * 0.03, Math.sin(a) * 0.4);
+    g.add(p);
+  }
+  return g;
+}
+function makeLiftArrows() {
+  const g = new THREE.Group();
+  for (const [dx, up] of [[-0.36, true], [0.36, false]]) {
+    const c = mesh(new THREE.ConeGeometry(0.06, 0.12, 4), M(up ? 0x6b55b8 : 0xffffff), { cast: false });
+    c.position.set(dx, 0.08, 0.36); if (!up) c.rotation.z = Math.PI; g.add(c);
+  }
+  return g;
+}
+
 // ---------- level build ----------
 let lv = null, levelIndex = 0, moves = 0, par = 0, mode = 'title';
 let levelObjs = [], hitboxes = [], falls = [], steamEmitters = [], particles = [];
-let clearTimer = 0, lastFlow = null;
-const view = { rot: 0, target: 0, drag: false };
+let clearTimer = 0, lastFlow = null, guideIdx = 0, highlight = null;
+const view = { rot: 0, target: 0 };
+const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.045, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffc83d, transparent: true, opacity: 0.95, depthTest: false }));
+ring.rotation.x = Math.PI / 2; ring.renderOrder = 10; ring.visible = false;
+pivot.add(ring);
 
 function clearScene() {
   for (const o of levelObjs) pivot.remove(o);
-  levelObjs = []; hitboxes = []; falls = []; steamEmitters = []; particles.forEach(p => scene.remove(p.sprite)); particles = [];
+  for (const f of falls) pivot.remove(f.mesh);
+  levelObjs = []; hitboxes = []; falls = []; steamEmitters = []; particles.forEach(p => pivot.remove(p.sprite)); particles = [];
 }
 function add(o) { pivot.add(o); levelObjs.push(o); return o; }
+const cellY = c => c.liftG ? c.liftG.position.y : 0;
 
 function buildLevel(i, showcase) {
   clearScene();
   levelIndex = i;
   lv = parseLevel(LEVELS[i]);
-  if (showcase) { for (const c of lv.cells) { c.mask = c.sol; c.k = 0; } par = 0; }
+  if (showcase) { resetState(lv); for (const c of lv.cells) { c.leafOn = false; c.iceOn = false; } par = 0; }
   else par = scramble(lv, i);
-  moves = 0; lv.done = false;
+  moves = 0; lv.done = false; lv.gateOpen = false; guideIdx = 0; highlight = null;
   const ox = -(lv.W - 1) / 2, oz = -(lv.H - 1) / 2;
   const rnd = mulberry32(i * 131 + 5);
   const th = CHAPTERS[chapterOf(i)];
   document.documentElement.style.setProperty('--sky-top', th.sky[0]);
   document.documentElement.style.setProperty('--sky-bot', th.sky[1]);
-  const maxH = Math.max(...lv.cells.map(c => c.h));
+  const maxH = Math.max(...lv.cells.map(c => Math.max(c.hSol, c.hAlt || 0)));
 
   // floating island base
-  const base = box(lv.W + 0.24, 0.5, lv.H + 0.24, M(COLORS.rock)); base.position.y = -0.62; add(base);
-  const under = mesh(new THREE.ConeGeometry(Math.min(lv.W, lv.H) * 0.5, 1.8, 7), M(COLORS.rock)); under.rotation.x = Math.PI; under.position.y = -1.75; add(under);
+  const base = box(lv.W + 0.24, 0.9, lv.H + 0.24, M(COLORS.rock)); base.position.y = -0.82; add(base);
+  const under = mesh(new THREE.ConeGeometry(Math.min(lv.W, lv.H) * 0.5, 1.8, 7), M(COLORS.rock)); under.rotation.x = Math.PI; under.position.y = -2.15; add(under);
   for (let k = 0; k < 5; k++) {
     const cl = new THREE.Group();
     for (let j = 0; j < 3; j++) { const p = sph(0.3 + rnd() * 0.25, M(COLORS.cloud), { cast: false, receive: false }); p.position.set(j * 0.4, rnd() * 0.15, rnd() * 0.2); cl.add(p); }
     const a = rnd() * TAU, r = Math.max(lv.W, lv.H) * 0.75 + 1 + rnd() * 1.5;
-    cl.position.set(Math.cos(a) * r, -1.6 + rnd() * 1.2, Math.sin(a) * r);
+    cl.position.set(Math.cos(a) * r, -1.8 + rnd() * 1.2, Math.sin(a) * r);
     cl.userData.drift = 0.05 + rnd() * 0.08;
     add(cl);
   }
 
   for (const c of lv.cells) {
-    const px = c.x + ox, pz = c.z + oz, ty = topY(c);
+    const px = c.x + ox, pz = c.z + oz, ty = c.hSol * STEP_H;
     c.pos = new THREE.Vector3(px, ty, pz);
-    const colH = 0.5 + ty;
-    const col = box(1, colH, 1, M(COLORS.dirt)); col.position.set(px, ty - colH / 2 - 0.06, pz); add(col);
-    const cap = box(1, 0.12, 1, M(th.grass[(c.x + c.z) % 2])); cap.position.set(px, ty - 0.06, pz); add(cap);
-    c.wet = 0; c.wetTarget = 0; c.wetDelay = 0; c.waterMeshes = [];
+    c.wet = 0; c.wetTarget = 0; c.wetDelay = 0; c.waterMeshes = []; c.happyTarget = 0;
+    let holder = null;
+    if (c.lift) { holder = new THREE.Group(); holder.position.y = (c.h - c.hSol) * STEP_H; add(holder); c.liftG = holder; }
+    const put = o => (holder ? holder.add(o) : add(o));
+    const colH = 1.1 + ty + (c.lift ? 0.9 : 0);
+    const col = box(1, colH, 1, M(COLORS.dirt)); col.position.set(px, ty - colH / 2 - 0.06, pz); put(col);
+    const cap = box(1, 0.12, 1, M(c.lift ? 0xc9b8f0 : th.grass[(c.x + c.z) % 2])); cap.position.set(px, ty - 0.06, pz); put(cap);
 
     if (c.kind === 'pipe' || c.kind === 'src') {
       const t = makeTrough(c.sol, c.fixed || c.kind === 'src');
       const wm = waterMat(); t.water.forEach(w => { w.material = wm; w.visible = false; });
       c.waterMat = wm; c.waterMeshes = t.water;
       t.g.position.copy(c.pos); t.g.rotation.y = -c.k * Math.PI / 2;
-      c.group = t.g; c.rotY = t.g.rotation.y; add(t.g);
+      c.group = t.g; c.rotY = t.g.rotation.y; put(t.g);
       if (c.kind === 'src') {
-        const ring = mesh(new THREE.CylinderGeometry(0.36, 0.42, 0.3, 18, 1, true), new THREE.MeshLambertMaterial({ color: COLORS.stoneDark, side: THREE.DoubleSide })); ring.position.set(px, ty + 0.15, pz); add(ring);
-        const rim = mesh(new THREE.TorusGeometry(0.36, 0.05, 8, 24), M(COLORS.stone)); rim.rotation.x = Math.PI / 2; rim.position.set(px, ty + 0.3, pz); add(rim);
+        const ringM = mesh(new THREE.CylinderGeometry(0.36, 0.42, 0.3, 18, 1, true), new THREE.MeshLambertMaterial({ color: COLORS.stoneDark, side: THREE.DoubleSide })); ringM.position.set(px, ty + 0.15, pz); add(ringM);
+        const rim = mesh(new THREE.TorusGeometry(0.36, 0.05, 8, 24), M(lv.colored ? WATER[c.color] : COLORS.stone)); rim.rotation.x = Math.PI / 2; rim.position.set(px, ty + 0.3, pz); add(rim);
         const pool = mesh(new THREE.CircleGeometry(0.35, 24), wm, { cast: false }); pool.rotation.x = -Math.PI / 2; pool.position.set(px, ty + 0.26, pz); add(pool);
-        c.pool = pool;
-        c.waterMeshes.push(pool);
-        c.wet = c.wetTarget = 1;
+        c.pool = pool; c.waterMeshes.push(pool);
+        wm.color.setHex(lv.colored ? WATER[c.color] : WATER.plain);
         steamEmitters.push({ pos: new THREE.Vector3(px, ty + 0.3, pz), rate: 3, acc: 0, on: () => true });
-      }
-      if (c.kind === 'pipe') {
+      } else {
         const hit = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.5, 0.98), new THREE.MeshBasicMaterial({ visible: false }));
-        hit.position.set(px, ty + 0.15, pz); hit.userData.cell = c; add(hit); hitboxes.push(hit);
+        hit.position.set(px, ty + 0.15, pz); hit.userData.cell = c; put(hit); hitboxes.push(hit);
       }
       if (c.yuzu) {
         const yz = new THREE.Group();
         for (let j = 0; j < 3; j++) { const y = sph(0.07, M(COLORS.yuzu)); y.position.set(Math.cos(j * 2.1) * 0.12, 0, Math.sin(j * 2.1) * 0.12); yz.add(y); }
-        const leaf = sph(0.5, M(COLORS.leaf)); leaf.scale.set(0.08, 0.02, 0.04); leaf.position.set(0.04, 0.07, 0.12); yz.add(leaf);
         yz.position.set(px, ty + 0.27, pz); add(yz); c.yuzuGroup = yz;
       }
+      if (c.scale) { const s = makeScale(); s.position.set(px + 0.3, ty, pz - 0.3); add(s); c.scaleG = s; const f = makeFlag(0xffc83d); f.position.set(px - 0.38, ty, pz - 0.38); add(f); }
+      if (c.gate) {
+        const ew = c.sol & (2 | 8);
+        const door = box(ew ? 0.08 : 0.44, 0.34, ew ? 0.44 : 0.08, M(COLORS.trunk)); door.position.set(0, 0.2, 0); t.g.add(door); c.door = door;
+        const f = makeFlag(0xffc83d); f.position.set(px - 0.38, ty, pz - 0.38); add(f);
+      }
+      if (c.link !== undefined) {
+        const r = mesh(new THREE.TorusGeometry(0.17, 0.04, 8, 20), M(LINK_COLORS[c.link % LINK_COLORS.length])); r.rotation.x = Math.PI / 2; r.position.y = 0.2; t.g.add(r);
+      }
+      if (c.leaf) { const pile = makeLeafPile(rnd); pile.position.copy(c.pos); put(pile); c.leafPile = pile; t.g.visible = !c.leafOn; }
+      if (c.ice) { const ib = mesh(new THREE.BoxGeometry(0.9, 0.38, 0.9), iceMat, { cast: false }); ib.position.set(px, ty + 0.19, pz); put(ib); c.iceBlock = ib; ib.visible = c.iceOn; }
+      if (c.cloud) { const cr = makeCloudRing(); cr.position.copy(c.pos); add(cr); c.cloudG = cr; }
+      if (c.lift) { const a = makeLiftArrows(); a.position.copy(c.pos); put(a); }
     } else if (c.kind === 'tub') {
       const tub = new THREE.Group(); tub.position.copy(c.pos); add(tub);
       const wall = mesh(new THREE.CylinderGeometry(0.4, 0.36, 0.34, 22, 1, true), new THREE.MeshLambertMaterial({ color: COLORS.wood, side: THREE.DoubleSide }));
       wall.position.y = 0.17; tub.add(wall);
       const floor = cyl(0.36, 0.36, 0.03, M(COLORS.woodDark), 22); floor.position.y = 0.02; tub.add(floor);
-      for (const y of [0.08, 0.27]) { const band = mesh(new THREE.TorusGeometry(0.385 - (0.27 - y) * 0.1, 0.018, 6, 28), M(COLORS.woodDark)); band.rotation.x = Math.PI / 2; band.position.y = y; tub.add(band); }
+      for (const y of [0.08, 0.27]) {
+        const band = mesh(new THREE.TorusGeometry(0.385 - (0.27 - y) * 0.1, y > 0.2 && c.want ? 0.035 : 0.018, 6, 28), M(y > 0.2 && c.want ? WATER[c.want] : COLORS.woodDark));
+        band.rotation.x = Math.PI / 2; band.position.y = y; tub.add(band);
+      }
       const wm = waterMat();
       const surf = mesh(new THREE.CircleGeometry(0.37, 24), wm, { cast: false }); surf.rotation.x = -Math.PI / 2; surf.position.y = 0.05; tub.add(surf);
       c.waterMat = wm; c.waterMeshes = [surf]; c.surf = surf;
       const capy = makeCapy(); capy.position.y = 0.03; capy.rotation.y = Math.PI / 4 + Math.floor(rnd() * 4) * Math.PI / 2; tub.add(capy);
-      c.capy = capy; c.happy = 0;
-      steamEmitters.push({ pos: new THREE.Vector3(px, ty + 0.4, pz), rate: 2.5, acc: 0, on: () => c.wet > 0.6 });
+      c.capy = capy; c.happy = 0; c.baseRot = capy.rotation.y;
+      steamEmitters.push({ pos: new THREE.Vector3(px, ty + 0.4, pz), rate: 2.5, acc: 0, on: () => c.happy > 0.6 });
     } else if (c.kind === 'cat') {
       const cat = makeCat(); cat.position.copy(c.pos); cat.rotation.y = rnd() * TAU; add(cat); c.cat = cat;
     } else {
@@ -713,63 +1034,126 @@ function buildLevel(i, showcase) {
       if (r < 0.38) deco = makeTree(rnd, th);
       else if (r < 0.66) deco = makeFlowers(rnd);
       else if (r < 0.76) deco = makeMushroom();
-      else if (r < 0.86) { deco = mesh(new THREE.DodecahedronGeometry(0.12 + rnd() * 0.06), M(COLORS.rock)); deco.position.y = 0.06; const g = new THREE.Group(); g.add(deco); deco = g; }
+      else if (r < 0.86) { const g = new THREE.Group(); const rock = mesh(new THREE.DodecahedronGeometry(0.12 + rnd() * 0.06), M(COLORS.rock)); rock.position.y = 0.06; g.add(rock); deco = g; }
       if (deco) { deco.position.set(px + (rnd() - 0.5) * 0.3, ty, pz + (rnd() - 0.5) * 0.3); deco.rotation.y = rnd() * TAU; add(deco); }
     }
   }
+  // ropes between linked pipes
+  const groups = new Map();
+  for (const c of lv.cells) if (c.link !== undefined) { if (!groups.has(c.link)) groups.set(c.link, []); groups.get(c.link).push(c); }
+  for (const [id, cs] of groups) for (let k = 1; k < cs.length; k++) {
+    const a = cs[k - 1].pos, b = cs[k].pos, y = Math.max(a.y, b.y) + 0.42;
+    const from = new THREE.Vector3(a.x, y, a.z), to = new THREE.Vector3(b.x, y, b.z), len = from.distanceTo(to);
+    const rope = mesh(new THREE.CylinderGeometry(0.02, 0.02, len, 6), M(LINK_COLORS[id % LINK_COLORS.length]), { cast: false });
+    rope.position.copy(from).add(to).multiplyScalar(0.5);
+    rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+    add(rope);
+    for (const p of [a, b]) { const knot = cyl(0.015, 0.015, y - p.y - 0.2, M(LINK_COLORS[id % LINK_COLORS.length]), 6, { cast: false }); knot.position.set(p.x, (y + p.y + 0.2) / 2, p.z); add(knot); }
+  }
   view.target = view.rot = showcase ? view.rot : 0;
   fitCamera(maxH);
+  lastFlow = null;
   refreshFlow(true);
-  if (showcase) for (const c of lv.cells) { c.wet = c.wetTarget; c.wetDelay = 0; if (c.capy) c.happy = c.wet; }
+  if (showcase) for (const c of lv.cells) { c.wet = c.wetTarget; c.wetDelay = 0; if (c.capy) c.happy = c.happyTarget; }
 }
 
 // ---------- flow and water ----------
+function waterColorFor(colors) {
+  if (!lv.colored || !colors) return WATER.plain;
+  if (colors.size > 1) return WATER.mixed;
+  return WATER[[...colors][0]];
+}
 function refreshFlow(silent) {
-  const f = flow(lv);
-  // distance from the spring along wet links, so water visibly travels
-  const dist = new Map([[lv.src, 0]]), q = [lv.src];
+  const prev = lastFlow;
+  const { f, thawed } = settle(lv);
+  // distance from the springs along wet links, so water visibly travels
+  const dist = new Map(lv.srcs.map(s => [s, 0])), q = [...lv.srcs];
   while (q.length) {
     const c = q.shift();
     for (const l of f.links) if (l.a === c && !dist.has(l.b)) { dist.set(l.b, dist.get(c) + 1); q.push(l.b); }
   }
   let maxDelay = 0;
-  const prevWet = lastFlow ? lastFlow.wet : new Set();
   for (const c of lv.cells) {
     const now = f.wet.has(c) ? 1 : 0;
+    if (now && c.waterMat) c.waterMat.color.setHex(waterColorFor(f.wet.get(c)));
     if (now !== c.wetTarget) {
       c.wetTarget = now;
       c.wetDelay = now ? (dist.get(c) || 0) * 0.13 : 0;
-      maxDelay = Math.max(maxDelay, c.wetDelay);
     }
+    if (now) maxDelay = Math.max(maxDelay, c.wetDelay);
+    if (c.kind === 'tub') { c.happyTarget = f.filled.includes(c) ? 1 : 0; c.mixed = f.mixed.includes(c); }
   }
-  // waterfalls where water steps down a terrace
+  for (const c of thawed) c.meltT = 0;
+  // waterfalls (and cloud spouts) where water changes level between cells
   for (const fl of falls) pivot.remove(fl.mesh);
   falls = [];
   for (const l of f.links) {
-    if (l.a.h <= l.b.h) continue;
+    if (l.a.h === l.b.h) continue;
     const dir = DIRS.find(d => d[2] === l.bit);
-    const top = topY(l.a) + 0.18, bottom = topY(l.b) + 0.12, hgt = top - bottom;
+    const ya = l.a.h * STEP_H + 0.18, yb = l.b.h * STEP_H + 0.12;
+    const top = Math.max(ya, yb), bottom = Math.min(ya, yb), hgt = top - bottom;
     const along = dir[0] !== 0;
     const m = mesh(new THREE.BoxGeometry(along ? 0.07 : 0.24, hgt, along ? 0.24 : 0.07), l.b.waterMat || waterMat(), { cast: false });
     m.position.set(l.a.pos.x + dir[0] * 0.5, bottom + hgt / 2, l.a.pos.z + dir[1] * 0.5);
     pivot.add(m); falls.push({ mesh: m, cell: l.b });
   }
-  if (!silent) {
-    const newTubs = f.filled.filter(t => !prevWet.has(t));
-    newTubs.forEach(t => Sound.capy(t.wetDelay + 0.3));
-    if (f.wet.size > prevWet.size) Sound.bloop();
-    const newCats = f.wetCats.filter(c => !prevWet.has(c));
-    if (newCats.length) { setTimeout(() => Sound.meow(), maxDelay * 1000); toast('고양이가 놀랐어요! 고양이 쪽 물길을 돌려 주세요'); }
-    const newYuzu = f.yuzu.filter(c => !prevWet.has(c));
-    if (newYuzu.length) setTimeout(() => toast('유자 상자에 물이 닿았어요'), maxDelay * 1000);
-  }
   lastFlow = f;
+  if (!silent) {
+    const had = (list, c) => prev && list(prev).includes(c);
+    const newTubs = f.filled.filter(t => !had(p => p.filled, t));
+    newTubs.forEach(t => Sound.capy(t.wetDelay + 0.25));
+    if (!newTubs.length && prev && f.wet.size > prev.wet.size) Sound.drop();
+    if (thawed.length) { Sound.melt(0.15); toast('얼음이 녹았어요. 이제 돌릴 수 있어요'); }
+    if (prev && f.gateOpen !== prev.gateOpen) { Sound.gate(f.gateOpen); if (f.gateOpen) Sound.ding(); toast(f.gateOpen ? '유자 저울이 기울었어요. 수문이 열렸어요!' : '유자 저울이 말라서 수문이 닫혔어요'); }
+    const newMixed = f.mixed.filter(t => !had(p => p.mixed, t));
+    if (newMixed.length) { Sound.mix(maxDelay); toast('물이 섞였어요. 욕조 테두리와 같은 색 물만 보내 주세요'); }
+    const newCats = f.wetCats.filter(c => !had(p => p.wetCats, c));
+    if (newCats.length) { Sound.meow(maxDelay); toast('고양이가 놀랐어요! 고양이 쪽 물길을 돌려 주세요'); }
+    const newYuzu = f.yuzu.filter(c => !had(p => p.yuzu, c));
+    if (newYuzu.length) setTimeout(() => { Sound.ding(); toast('유자 상자에 물이 닿았어요'); }, maxDelay * 1000);
+  }
   clearTimeout(clearTimer);
   if (f.solved && !silent && mode === 'play') {
     lv.done = true;
+    highlight = null;
     clearTimer = setTimeout(() => showClear(f), (maxDelay + 1.6) * 1000);
   }
   updateHUD();
+  updateGuide();
+}
+
+// ---------- coach: highlight the next thing to do ----------
+function stepDone(g) {
+  const c = lv.at(...g.at);
+  if (g.until === 'wet') return c.kind === 'tub' ? lastFlow.filled.includes(c) : lastFlow.wet.has(c);
+  if (g.until === 'clear') return !c.leafOn;
+  if (g.until === 'thaw') return !c.iceOn;
+  if (g.until === 'height') return c.h === c.hSol;
+  if (g.until === 'sol') return c.mask === c.sol;
+  throw new Error(`unknown guide step ${g.until}`);
+}
+// first tile on the intended route to `target` that still needs a tap (ice can't be tapped)
+function nextOnRoute(target, exclude) {
+  for (const c of solutionPath(lv, target)) {
+    if (c === exclude) continue;
+    const w = needsWork(c);
+    if (w && w !== 'thaw') return c;
+  }
+  return null;
+}
+function updateGuide() {
+  if (!lv.guide || mode !== 'play' || lv.done) { highlight = null; if (lv && lv.guide && lv.done) hideTip(); return; }
+  while (guideIdx < lv.guide.length && stepDone(lv.guide[guideIdx])) guideIdx++;
+  if (guideIdx >= lv.guide.length) {
+    highlight = null;
+    setTip('잘했어요! 남은 물길도 이어서 모든 욕조를 채워 주세요.', '', true);
+    return;
+  }
+  const g = lv.guide[guideIdx], c = lv.at(...g.at);
+  highlight = c;
+  if (g.until === 'wet') highlight = nextOnRoute(c) || c;
+  if (g.until === 'thaw') highlight = nextOnRoute(c, c) || c;
+  setTip(g.text, `${guideIdx + 1}/${lv.guide.length}`, false);
 }
 
 // ---------- camera ----------
@@ -779,8 +1163,8 @@ function fitCamera(maxH = lastMaxH) {
   const w = window.innerWidth, h = window.innerHeight, aspect = w / h;
   renderer.setSize(w, h, false);
   const W = lv ? lv.W : 5, H = lv ? lv.H : 5;
-  const span = Math.hypot(W, H) + 0.8;                 // widest the island gets while rotating
-  const needH = span * 0.62 + maxH * STEP_H + 2.4;    // island + floating rock + HUD space
+  const span = Math.hypot(W, H) + 0.8;
+  const needH = span * 0.62 + maxH * STEP_H + 2.8;
   const fh = Math.max(needH, (span + 0.6) / aspect);
   camera.left = -fh * aspect / 2; camera.right = fh * aspect / 2;
   camera.top = fh / 2; camera.bottom = -fh / 2;
@@ -809,57 +1193,62 @@ canvas.addEventListener('pointermove', e => {
     return;
   }
   const dx = e.clientX - down.x;
-  if (down.moved || Math.abs(dx) > 7) {
-    down.moved = true;
-    view.rot = view.target = down.rot + dx * 0.009;
-  }
+  if (down.moved || Math.abs(dx) > 7) { down.moved = true; view.rot = view.target = down.rot + dx * 0.009; }
 });
 canvas.addEventListener('pointerup', e => {
-  if (down && !down.moved && mode === 'play') {
-    const c = cellAt(e);
-    if (c) tapCell(c);
-  }
+  if (down && !down.moved && mode === 'play') { const c = cellAt(e); if (c) tapCell(c); }
   down = null;
 });
 canvas.addEventListener('pointercancel', () => { down = null; });
 
+const groupOf = c => (c.link === undefined ? [c] : lv.cells.filter(d => d.link === c.link));
 function tapCell(c) {
   if (lv.done) return;
+  if (c.leafOn) { c.leafOn = false; c.leafT = 0; c.group.visible = true; moves++; Sound.rustle(); refreshFlow(false); return; }
+  if (c.iceOn) { c.shake = 0.35; Sound.bonk(); toast('꽁꽁 얼어 있어요. 따끈한 물이 바로 옆까지 오면 녹아요'); return; }
+  if (c.lift) { const up = c.h === c.hSol ? c.hAlt > c.hSol : c.hSol > c.hAlt; c.h = c.h === c.hSol ? c.hAlt : c.hSol; moves++; Sound.lift(up); refreshFlow(false); return; }
+  if (c.gate) { c.shake = 0.35; Sound.bonk(); toast(lastFlow.gateOpen ? '수문이 열려 있어요' : '수문은 노란 깃발의 유자 저울에 물이 닿으면 열려요'); return; }
   if (c.fixed) { c.shake = 0.35; Sound.bonk(); toast('돌로 된 물길은 돌릴 수 없어요'); return; }
   if (c.sol === 15) { c.bounce = 0.3; Sound.tok(); return; }
-  rotateCell(c);
+  for (const d of groupOf(c)) rotateCell(d);
+  Sound.tok();
   moves++;
   refreshFlow(false);
 }
 function rotateCell(c) {
   c.k++; c.mask = rotCW(c.mask);
   c.rotY = -c.k * Math.PI / 2; c.bounce = 0.25;
-  Sound.tok();
 }
 function turnView(dir) { view.target = Math.round((view.target + dir * Math.PI / 2) / (Math.PI / 2)) * (Math.PI / 2); }
 
+// hint: do one useful action on the route to a tub that isn't happy yet
+function hintCell() {
+  const f = lastFlow;
+  for (const t of f.tubs.filter(t => !f.filled.includes(t))) { const c = nextOnRoute(t); if (c) return c; }
+  const leaking = lv.cells.find(c => f.wet.has(c) && needsWork(c) && needsWork(c) !== 'thaw');
+  if (leaking) return leaking;
+  return lv.cells.find(c => { const w = needsWork(c); return w && w !== 'thaw'; }) || null;
+}
 $('#viewL').addEventListener('click', () => turnView(-1));
 $('#viewR').addEventListener('click', () => turnView(1));
-$('#resetBtn').addEventListener('click', () => startLevel(levelIndex));
+$('#resetBtn').addEventListener('click', () => startLevel(levelIndex, true));
 $('#hintBtn').addEventListener('click', () => {
   if (mode !== 'play' || lv.done) return;
-  const wrong = lv.cells.filter(c => rotatable(c) && c.mask !== c.sol);
-  if (!wrong.length) return;
-  // prefer a tile that already has water nearby, so the hint moves the flow forward
-  const wetNear = wrong.filter(c => DIRS.some(([dx, dz]) => { const n = lv.at(c.x + dx, c.z + dz); return n && lastFlow.wet.has(n); }));
-  const c = (wetNear.length ? wetNear : wrong)[0];
-  let n = 0;
-  while (c.mask !== c.sol) { rotateCell(c); n++; }
-  moves += n;
+  const c = hintCell();
+  if (!c) { toast('얼음 옆까지 따끈한 물을 보내 보세요'); return; }
+  const w = needsWork(c);
+  if (w === 'clear') { c.leafOn = false; c.leafT = 0; c.group.visible = true; moves++; Sound.rustle(); }
+  else if (w === 'height') { c.h = c.hSol; moves++; Sound.lift(c.hSol > c.hAlt); }
+  else { const g = groupOf(c); while (c.mask !== c.sol) { g.forEach(rotateCell); moves++; } Sound.tok(); }
   c.glow = 1.2;
-  toast('반짝이는 물길을 돌려 두었어요');
+  toast('반짝인 물길을 맞춰 두었어요');
   refreshFlow(false);
 });
 document.addEventListener('keydown', e => {
   if (mode !== 'play') return;
   if (e.key === 'ArrowLeft') turnView(-1);
   if (e.key === 'ArrowRight') turnView(1);
-  if (e.key === 'r' || e.key === 'R') startLevel(levelIndex);
+  if (e.key === 'r' || e.key === 'R') startLevel(levelIndex, true);
 });
 
 // ---------- UI ----------
@@ -868,13 +1257,46 @@ function toast(text) {
   const t = $('#toast');
   t.textContent = text; t.hidden = false;
   t.style.animation = 'none'; void t.offsetWidth; t.style.animation = '';
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2400);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
 }
+let tipOpen = false, tipClosable = true;
+function setTip(text, step, closable) {
+  $('#tipText').textContent = text;
+  $('#tipStep').textContent = step;
+  $('#tipStep').hidden = !step;
+  tipClosable = closable; tipOpen = true;
+  $('#tip').hidden = mode !== 'play';
+}
+function hideTip() { tipOpen = false; $('#tip').hidden = true; }
+$('#tip').addEventListener('click', () => { if (tipClosable) hideTip(); });
+
+const ICON = {
+  tub: '<svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="13" rx="8" ry="5" fill="#c28d55"/><ellipse cx="10" cy="11" rx="7" ry="3" fill="#63c9dc"/><circle cx="10" cy="6" r="3.6" fill="#b07a4f"/></svg>',
+  cat: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 8 l2 -5 l3 4 h2 l3 -4 l2 5" fill="#f2b46d"/><ellipse cx="10" cy="12" rx="7" ry="6" fill="#f2b46d"/></svg>',
+  gate: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="4" width="6" height="13" rx="1.5" fill="#9b6a3c"/><path d="M15 3 v8 M15 3 l4 2 l-4 2" stroke="#ffc83d" stroke-width="2" fill="#ffc83d"/></svg>',
+  yuzu: '<svg viewBox="0 0 20 20" aria-hidden="true"><use href="#yuzu"/></svg>',
+  dot: c => `<span class="dot" style="background:${c}"></span>`,
+};
 function updateHUD() {
-  if (mode !== 'play') return;
+  if (!lv || (mode !== 'play' && mode !== 'clear' && mode !== 'intro')) return;
   $('#stageTitle').textContent = `${levelIndex + 1}. ${LEVELS[levelIndex].name}`;
-  $('#stageTitle').title = CHAPTERS[chapterOf(levelIndex)].name;
-  $('#moveLabel').textContent = `돌린 횟수 ${moves} · 목표 ${par}`;
+  $('#moveLabel').textContent = `누른 횟수 ${moves} · 목표 ${par}`;
+  const f = lastFlow, chips = [];
+  if (lv.colored) {
+    for (const [col, label, hex] of [['a', '유자탕', '#ffb547'], ['b', '쑥탕', '#8fd46f']]) {
+      const ts = f.tubs.filter(t => t.want === col);
+      if (!ts.length) continue;
+      const n = ts.filter(t => f.filled.includes(t)).length;
+      chips.push({ html: `${ICON.dot(hex)}${label} ${n}/${ts.length}`, cls: n === ts.length ? 'done' : '' });
+    }
+  } else {
+    chips.push({ html: `${ICON.tub}욕조 ${f.filled.length}/${f.tubs.length}`, cls: f.filled.length === f.tubs.length ? 'done' : '' });
+  }
+  if (f.mixed.length) chips.push({ html: '물이 섞였어요', cls: 'warn' });
+  if (lv.cells.some(c => c.kind === 'cat')) chips.push(f.wetCats.length ? { html: `${ICON.cat}고양이가 젖었어요`, cls: 'warn' } : { html: `${ICON.cat}고양이 조심`, cls: '' });
+  if (lv.cells.some(c => c.gate)) chips.push({ html: `${ICON.gate}수문 ${f.gateOpen ? '열림' : '닫힘'}`, cls: f.gateOpen ? 'done' : '' });
+  if (lv.cells.some(c => c.yuzu)) chips.push({ html: `${ICON.yuzu}유자 ${f.yuzu.length ? '획득' : '(선택)'}`, cls: f.yuzu.length ? 'done' : 'soft' });
+  $('#goals').innerHTML = chips.map(c => `<span class="goal ${c.cls}">${c.html}</span>`).join('');
 }
 function renderSound() {
   $('#soundBtn').setAttribute('aria-label', save.sound ? '소리 끄기' : '소리 켜기');
@@ -890,10 +1312,8 @@ function flowerIcons(n, total = 3, cls = '') {
   return s;
 }
 function totals() {
-  const done = Object.keys(save.levels).length;
-  const fl = Object.values(save.levels).reduce((s, r) => s + r.flowers, 0);
-  const yz = Object.values(save.levels).filter(r => r.yuzu).length;
-  return { done, fl, yz };
+  const recs = Object.values(save.levels);
+  return { done: recs.length, fl: recs.reduce((s, r) => s + r.flowers, 0), yz: recs.filter(r => r.yuzu).length };
 }
 function progressText() {
   const t = totals();
@@ -901,35 +1321,70 @@ function progressText() {
 }
 function showScreen(name) {
   mode = name;
-  $('#title').hidden = name !== 'title';
-  $('#select').hidden = name !== 'select';
-  $('#clear').hidden = name !== 'clear';
-  const playing = name === 'play' || name === 'clear';
-  $('#hud').hidden = !playing;
+  for (const id of ['title', 'select', 'clear', 'intro', 'dex']) $('#' + id).hidden = name !== id;
+  $('#hud').hidden = !(name === 'play' || name === 'clear' || name === 'intro');
   $('#tools').hidden = name !== 'play';
   $('#tip').hidden = name !== 'play' || !tipOpen;
   if (name !== 'play') $('#toast').hidden = true;
+  ring.visible = false;
 }
-let tipOpen = true;
-$('#tip').addEventListener('click', () => { tipOpen = false; $('#tip').hidden = true; });
 
 function firstUnfinished() {
   for (let i = 0; i < LEVELS.length; i++) if (!isCleared(i)) return i;
   return LEVELS.length - 1;
 }
-function startLevel(i) {
+function startLevel(i, restart) {
   clearTimeout(clearTimer);
-  lastFlow = null;
-  mode = 'play';
   buildLevel(i, false);
-  tipOpen = !!LEVELS[i].tip;
-  $('#tipText').textContent = LEVELS[i].tip;
-  showScreen('play');
-  updateHUD();
+  const L = LEVELS[i];
+  tipOpen = false;
+  if (L.tip && !L.guide) setTip(L.tip, '', true);
+  if (L.intro && !save.seen[L.intro] && !restart) showIntro(L.intro, true);
+  else showScreen('play');
+  updateHUD(); updateGuide();
 }
+
+// gimmick card: before a stage that introduces it, or from the guide book
+function showIntro(key, beforePlay) {
+  const g = GIMMICKS[key];
+  $('#introTag').textContent = key === 'goal' ? '게임 목표' : beforePlay ? '새로운 물길' : '물길 도감';
+  $('#introArt').innerHTML = g.art;
+  $('#introTitle').textContent = g.name;
+  $('#introText').textContent = g.text;
+  $('#introGo').textContent = beforePlay ? '해볼게요' : '닫기';
+  $('#introGo').onclick = () => {
+    if (beforePlay) { save.seen[key] = true; writeSave(); showScreen('play'); updateGuide(); }
+    else openDex();
+  };
+  showScreen('intro');
+  $('#introGo').focus();
+}
+let dexFrom = 'play';
+function unlockedGimmicks() {
+  const last = Math.max(firstUnfinished(), mode === 'play' || mode === 'clear' ? levelIndex : 0);
+  const keys = new Set(LEVELS.slice(0, last + 1).map(L => L.intro).filter(Boolean));
+  return GIMMICK_ORDER.filter(k => keys.has(k) || save.seen[k]);
+}
+function openDex() {
+  if (mode !== 'dex' && mode !== 'intro') dexFrom = mode;
+  const open = new Set(unlockedGimmicks());
+  $('#dexList').replaceChildren(...GIMMICK_ORDER.map(k => {
+    const g = GIMMICKS[k], b = document.createElement('button');
+    b.type = 'button'; b.className = 'dex-item' + (open.has(k) ? '' : ' locked'); b.disabled = !open.has(k);
+    b.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true">${open.has(k) ? g.art : '<circle cx="32" cy="32" r="22" fill="#e8e2d6"/>'}</svg><span><b></b><small></small></span>`;
+    b.querySelector('b').textContent = open.has(k) ? g.name : '아직 못 만났어요';
+    b.querySelector('small').textContent = open.has(k) ? g.text : '마을을 지나가면 만날 수 있어요';
+    if (open.has(k)) b.addEventListener('click', () => showIntro(k, false));
+    return b;
+  }));
+  showScreen('dex');
+}
+$('#helpBtn').addEventListener('click', openDex);
+$('#closeDex').addEventListener('click', () => { if (dexFrom === 'play') showScreen('play'); else if (dexFrom === 'select') openSelect(); else showTitle(); });
+
 let selectFrom = 'title', selectChapter = 0;
 function openSelect() {
-  if (mode !== 'select') selectFrom = mode;
+  if (mode !== 'select' && mode !== 'dex') selectFrom = mode;
   selectChapter = chapterOf(mode === 'play' || mode === 'clear' ? levelIndex : firstUnfinished());
   renderSelect();
   showScreen('select');
@@ -941,7 +1396,7 @@ function renderSelect() {
     b.type = 'button'; b.role = 'tab';
     b.setAttribute('aria-selected', String(k === selectChapter));
     b.disabled = !isOpen(k * 10);
-    const done = LEVELS.slice(k * 10, k * 10 + 10).filter((_, j) => isCleared(k * 10 + j)).length;
+    const done = [...Array(10).keys()].filter(j => isCleared(k * 10 + j)).length;
     b.innerHTML = `<b>${k + 1}</b><span></span><small>${b.disabled ? '잠김' : `${done}/10`}</small>`;
     b.querySelector('span').textContent = ch.name;
     b.addEventListener('click', () => { selectChapter = k; renderSelect(); });
@@ -950,6 +1405,8 @@ function renderSelect() {
   // scroll only the tab strip; scrollIntoView would also drag the whole overlay sideways
   const strip = $('#chapters'), sel = strip.children[selectChapter];
   if (sel) strip.scrollLeft = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+  const gim = CHAPTERS[selectChapter].gim;
+  $('#villageGim').textContent = gim ? `이 마을에서 만나는 물길 · ${GIMMICKS[gim].name}` : '온천물 잇기의 기본을 배워요';
   $('#stages').replaceChildren(...LEVELS.slice(selectChapter * 10, selectChapter * 10 + 10).map((L, j) => {
     const i = selectChapter * 10 + j;
     const b = document.createElement('button');
@@ -958,7 +1415,7 @@ function renderSelect() {
     b.className = 'stage' + (rec ? ' cleared' : '') + (i === next && !rec ? ' next' : '');
     b.disabled = !isOpen(i);
     b.innerHTML = `<span class="num">${i + 1}</span><span class="nm"></span><span class="flowers">${b.disabled ? '' : flowerIcons(rec ? rec.flowers : 0)}${rec && rec.yuzu ? '<svg aria-label="유자"><use href="#yuzu"/></svg>' : ''}</span>`;
-    b.querySelector('.nm').textContent = b.disabled ? '잠김' : (i < 10 ? L.name : `${j + 1}번 온천`);
+    b.querySelector('.nm').textContent = b.disabled ? '잠김' : i < 10 ? L.name : L.intro ? '배워 보기' : `${j + 1}번 온천`;
     b.setAttribute('aria-label', `${i + 1}. ${L.name}${b.disabled ? ' (잠김)' : rec ? `, 꽃 ${rec.flowers}송이` : ''}`);
     b.addEventListener('click', () => startLevel(i));
     return b;
@@ -973,21 +1430,25 @@ $('#closeSelect').addEventListener('click', () => { if (selectFrom === 'play') s
 function showClear(f) {
   const fl = flowersFor(moves, par), gotYuzu = f.yuzu.length > 0;
   const prev = save.levels[levelIndex];
-  const best = prev ? Math.min(prev.moves, moves) : moves;
-  save.levels[levelIndex] = { moves: best, flowers: Math.max(prev ? prev.flowers : 0, fl), yuzu: !!(gotYuzu || (prev && prev.yuzu)) };
+  save.levels[levelIndex] = { moves: prev ? Math.min(prev.moves, moves) : moves, flowers: Math.max(prev ? prev.flowers : 0, fl), yuzu: !!(gotYuzu || (prev && prev.yuzu)) };
   writeSave();
-  const last = levelIndex === LEVELS.length - 1;
-  $('#clearTitle').textContent = last ? '온 세상이 따끈해졌어요' : levelIndex % 10 === 9 ? `${CHAPTERS[chapterOf(levelIndex)].name} 완성!` : f.tubs.length > 1 ? '다들 온천에 들어갔어요' : '온천에 쏙 들어갔어요';
+  const last = levelIndex === LEVELS.length - 1, villageEnd = levelIndex % 10 === 9;
+  $('#clearTitle').textContent = last ? '온 세상이 따끈해졌어요' : villageEnd ? `${CHAPTERS[chapterOf(levelIndex)].name} 완성!` : f.tubs.length > 1 ? '다들 온천에 들어갔어요' : '온천에 쏙 들어갔어요';
   $('#bigFlowers').innerHTML = flowerIcons(fl, 3, 'f-on-anim');
-  const stats = [`돌린 횟수 ${moves} · 목표 ${par}`];
+  const stats = [`누른 횟수 ${moves} · 목표 ${par}`];
   if (prev && moves < prev.moves) stats.push('최고 기록');
   if (LEVELS[levelIndex].yuzu) stats.push(gotYuzu ? '유자 획득' : '유자를 놓쳤어요');
+  if (fl < 3) stats.push(`목표 ${par}번 안에 풀면 꽃 3송이`);
   $('#clearStats').replaceChildren(...stats.map(t => Object.assign(document.createElement('span'), { textContent: t })));
-  $('#nextBtn').textContent = last ? '스테이지 목록' : '다음 온천';
+  const nextGim = !last && villageEnd ? CHAPTERS[chapterOf(levelIndex) + 1].gim : null;
+  $('#clearNext').textContent = nextGim ? `다음 마을 ${CHAPTERS[chapterOf(levelIndex) + 1].name}에서 새 물길 '${GIMMICKS[nextGim].name}'을 만나요` : '';
+  $('#clearNext').hidden = !nextGim;
+  $('#nextBtn').textContent = last ? '스테이지 목록' : villageEnd ? '다음 마을로' : '다음 온천';
   Sound.chime();
+  hideTip();
   showScreen('clear');
 }
-$('#againBtn').addEventListener('click', () => startLevel(levelIndex));
+$('#againBtn').addEventListener('click', () => startLevel(levelIndex, true));
 $('#nextBtn').addEventListener('click', () => {
   if (levelIndex === LEVELS.length - 1) openSelect();
   else startLevel(levelIndex + 1);
@@ -995,8 +1456,7 @@ $('#nextBtn').addEventListener('click', () => {
 
 function showTitle() {
   clearTimeout(clearTimer);
-  lastFlow = null;
-  mode = 'title';
+  tipOpen = false;
   buildLevel(9, true);
   $('#playBtn').textContent = totals().done ? '이어하기' : '시작하기';
   $('#progressNote').textContent = progressText();
@@ -1004,12 +1464,12 @@ function showTitle() {
 }
 
 // ---------- animation ----------
-function spawnSteam(pos) {
+function spawnSteam(pos, scale = 1) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, depthWrite: false, opacity: 0 }));
   sp.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0, (Math.random() - 0.5) * 0.3));
   sp.scale.setScalar(0.18);
   pivot.add(sp);
-  particles.push({ sprite: sp, age: 0, life: 2.2 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.08 });
+  particles.push({ sprite: sp, age: 0, life: 2.2 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.08, size: scale });
 }
 const clock = new THREE.Clock();
 function tick() {
@@ -1019,6 +1479,7 @@ function tick() {
   pivot.rotation.y = view.rot;
 
   if (lv) for (const c of lv.cells) {
+    if (c.liftG) c.liftG.position.y += ((c.h - c.hSol) * STEP_H - c.liftG.position.y) * Math.min(1, dt * 10);
     if (c.group) {
       c.group.rotation.y += (c.rotY - c.group.rotation.y) * Math.min(1, dt * 14);
       let s = 1;
@@ -1028,6 +1489,22 @@ function tick() {
       if (c.shake > 0) { c.shake -= dt; c.group.position.x = c.pos.x + Math.sin(t * 60) * 0.04 * c.shake / 0.35; }
       if (c.glow > 0) { c.glow -= dt; c.group.position.y = c.pos.y + Math.max(0, Math.sin(c.glow * 8)) * 0.1; } else c.group.position.y = c.pos.y;
     }
+    if (c.door) c.door.position.y += ((lastFlow.gateOpen ? 0.5 : 0.2) - c.door.position.y) * Math.min(1, dt * 6);
+    if (c.scaleG) { c.scaleG.rotation.z = c.wet > 0.5 ? -0.25 : 0; c.scaleG.userData.fruit.position.y = 0.32 + (c.wet > 0.5 ? Math.sin(t * 4) * 0.02 : 0); }
+    if (c.leafPile && c.leafPile.visible && !c.leafOn) {
+      c.leafT += dt;
+      c.leafPile.children.forEach((l, n) => { l.position.y += dt * (1.2 + n * 0.08); l.position.x += dt * Math.cos(n) * 0.8; l.rotation.z += dt * 6; });
+      if (c.leafT > 0.8) c.leafPile.visible = false;
+    }
+    if (c.iceBlock && c.iceBlock.visible && !c.iceOn) {
+      if (c.meltT === undefined) c.meltT = 0;
+      c.meltT += dt;
+      const k = Math.max(0, 1 - c.meltT / 0.8);
+      c.iceBlock.scale.set(k, k, k);
+      if (Math.random() < dt * 12) spawnSteam(c.pos.clone().add(new THREE.Vector3(0, 0.3 + cellY(c), 0)));
+      if (k <= 0) c.iceBlock.visible = false;
+    }
+    if (c.cloudG) { c.cloudG.position.y = c.pos.y + Math.sin(t * 1.5 + c.x) * 0.03; c.cloudG.rotation.y += dt * 0.2; }
     if (c.wetDelay > 0) c.wetDelay -= dt;
     else c.wet += (c.wetTarget - c.wet) * Math.min(1, dt * 5);
     if (c.waterMat) {
@@ -1037,15 +1514,16 @@ function tick() {
     if (c.pool) c.pool.position.y = c.pos.y + 0.26 + Math.sin(t * 3) * 0.008;
     if (c.surf) c.surf.position.y = 0.05 + c.wet * 0.2 + Math.sin(t * 2 + c.x) * 0.006;
     if (c.capy) {
-      const want = c.wet > 0.6 ? 1 : 0;
+      const want = c.happyTarget && c.wet > 0.6 ? 1 : 0;
       if (want && c.happy < 0.01) c.hopT = 0;
       c.happy += (want - c.happy) * Math.min(1, dt * 4);
       for (const e of c.capy.userData.eyes) e.scale.y = 0.036 * (1 - c.happy * 0.82);
       const yz = c.capy.userData.yuzu; yz.visible = c.happy > 0.05; yz.scale.setScalar(Math.max(0.001, c.happy));
       if (c.hopT !== undefined && c.hopT < 1) { c.hopT += dt * 2.2; c.capy.position.y = 0.03 + Math.sin(Math.min(1, c.hopT) * Math.PI) * 0.22; }
       else c.capy.position.y = 0.03 + (reduced ? 0 : Math.sin(t * 1.6 + c.x * 2) * 0.008 * c.happy);
-      // shiver a little while waiting in an empty tub
+      // shiver while waiting; shake the head at mixed water
       c.capy.rotation.z = c.happy < 0.5 && !reduced ? Math.sin(t * 30) * 0.012 : 0;
+      c.capy.rotation.y = c.baseRot + (c.mixed && !reduced ? Math.sin(t * 9) * 0.25 : 0);
     }
     if (c.cat) {
       const wet = c.wet > 0.4;
@@ -1060,6 +1538,14 @@ function tick() {
   for (const fl of falls) fl.mesh.visible = fl.cell.wet > 0.05;
   for (const o of levelObjs) if (o.userData.drift) o.position.x += Math.sin(t * o.userData.drift) * 0.002;
 
+  if (highlight && mode === 'play') {
+    ring.visible = true;
+    ring.position.set(highlight.pos.x, highlight.pos.y + cellY(highlight) + 0.24, highlight.pos.z);
+    const s = 1 + (reduced ? 0 : Math.sin(t * 5) * 0.08);
+    ring.scale.set(s, s, s);
+    ring.material.opacity = 0.75 + Math.sin(t * 5) * 0.2;
+  } else ring.visible = false;
+
   for (const em of steamEmitters) {
     if (!em.on()) continue;
     em.acc += dt * em.rate;
@@ -1069,7 +1555,7 @@ function tick() {
     p.age += dt;
     const k = p.age / p.life;
     p.sprite.position.y += dt * 0.35; p.sprite.position.x += p.vx * dt;
-    p.sprite.scale.setScalar(0.16 + k * 0.4);
+    p.sprite.scale.setScalar((0.16 + k * 0.4) * p.size);
     p.sprite.material.opacity = Math.sin(Math.min(1, k) * Math.PI) * 0.55;
   }
   particles = particles.filter(p => { if (p.age < p.life) return true; pivot.remove(p.sprite); p.sprite.material.dispose(); return false; });
@@ -1080,18 +1566,10 @@ function tick() {
 
 // ---------- boot ----------
 renderSound();
-window.claude?.hot?.snapshot?.(() => ({ mode, levelIndex, ks: lv ? lv.cells.map(c => c.k || 0) : [], moves }));
+window.claude?.hot?.snapshot?.(() => ({ mode, levelIndex }));
 function boot(data) {
-  if (data && data.mode === 'play' && Number.isInteger(data.levelIndex)) {
-    startLevel(data.levelIndex);
-    lv.cells.forEach((c, n) => {
-      if (!rotatable(c)) return;
-      while ((c.k % 4 + 4) % 4 !== (data.ks[n] % 4 + 4) % 4) { c.k++; c.mask = rotCW(c.mask); }
-      c.rotY = -c.k * Math.PI / 2; c.group.rotation.y = c.rotY;
-    });
-    moves = data.moves || 0;
-    refreshFlow(true);
-  } else showTitle();
+  if (data && data.mode === 'play' && Number.isInteger(data.levelIndex)) startLevel(data.levelIndex, true);
+  else showTitle();
   requestAnimationFrame(tick);
 }
 window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
