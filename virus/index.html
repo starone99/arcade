@@ -1,0 +1,1643 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="카피바라가 온 인류에게 행복바이러스를 퍼뜨리는 전략 게임">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>카피바라 행복바이러스</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: one-screen game. Top bar, news strip, dot-matrix world map at dusk-onsen, bottom HUD; overlays for start / evolve / ending */
+:root {
+  --ink: #0d262d;        /* deep pond at dusk */
+  --pond: #143841;
+  --pond-2: #1b4852;
+  --line: #2a5b65;
+  --mist: #e6eee7;       /* steam */
+  --mist-dim: #9db7b1;
+  --fur: #b27c50;        /* capybara */
+  --fur-dark: #7a5233;
+  --yuzu: #ffb52e;       /* happiness */
+  --yuzu-deep: #d98600;
+  --blush: #ff93ab;      /* chill */
+  --serious: #8fb2d6;    /* the cure: cold office blue */
+  --land: #355f69;
+  --land-sel: #5a8c96;
+  --leaf: #63ad6c;
+  --wood: #9b6a3c;
+  --duck: #ffd84d;
+  --scarf: #e3584b;
+  --water: #2f7c88;
+  --scrim: rgba(5, 18, 22, 0.74);
+  --f-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: dark;
+}
+html { box-sizing: border-box; height: 100%; }
+body { height: 100%; }
+body {
+  margin: 0; background: var(--ink); color: var(--mist);
+  font-family: var(--f-body); font-size: 15px; line-height: 1.5; overflow: hidden;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--yuzu); outline-offset: 2px; }
+
+.f-fur { fill: var(--fur); } .f-furd { fill: var(--fur-dark); } .f-yuzu { fill: var(--yuzu); }
+.f-leaf { fill: var(--leaf); } .f-ink { fill: var(--ink); } .f-blush { fill: var(--blush); opacity: .55; }
+.f-water { fill: var(--pond-2); } .s-ink { stroke: var(--ink); } .s-mist { stroke: var(--mist); }
+
+#app { height: 100%; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+
+/* top bar */
+.topbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 10px 16px 6px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; min-width: 0; }
+.brand svg { width: 34px; height: 26px; flex: none; }
+.brand span { font-family: var(--f-display); font-size: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px;
+  background: var(--pond); border: 1px solid var(--line);
+  font-family: var(--f-display); font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pill svg { width: 18px; height: 18px; }
+.speed { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--pond); border: 1px solid var(--line); }
+.speed button {
+  border: 0; background: none; cursor: pointer; padding: 3px 11px; border-radius: 999px;
+  font-family: var(--f-display); font-size: 15px; color: var(--mist-dim);
+}
+.speed button[aria-pressed="true"] { background: var(--yuzu); color: var(--ink); }
+
+.ticker { padding: 0 16px 8px; min-width: 0; }
+.ticker p {
+  margin: 0; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ticker b { font-family: var(--f-display); font-weight: 400; color: var(--yuzu); margin-right: 8px; font-variant-numeric: tabular-nums; }
+.ticker p.in { animation: slide .5s ease-out; }
+@keyframes slide { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* map */
+.mapwrap {
+  position: relative; min-height: 0; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 40%, var(--pond) 0%, var(--ink) 75%);
+  border-block: 1px solid var(--line);
+}
+#map { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.banner {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  width: max-content; max-width: calc(100% - 32px);
+  padding: 8px 10px 8px 16px; border-radius: 999px; background: var(--pond-2); border: 1px solid var(--yuzu);
+  font-family: var(--f-display); font-size: 16px; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+.zoom {
+  position: absolute; right: 12px; bottom: 12px; display: grid; gap: 6px;
+}
+.zoom button {
+  width: 40px; height: 40px; border-radius: 12px; cursor: pointer; font-family: var(--f-display); font-size: 20px; line-height: 1;
+  background: var(--pond); border: 1px solid var(--line); color: var(--mist);
+}
+.rcard {
+  position: absolute; left: 16px; bottom: 12px; width: min(250px, calc(100% - 32px));
+  background: var(--pond); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.35);
+}
+.rcard .rhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rcard h3 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 19px; }
+.xbtn { border: 0; background: none; cursor: pointer; font-size: 22px; line-height: 1; padding: 2px 6px; color: var(--mist-dim); border-radius: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--pond-2); color: var(--mist-dim); border: 1px solid var(--line); }
+.chip.warm { color: var(--yuzu); border-color: var(--yuzu-deep); }
+.rcard dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 14px; }
+.rcard dt { color: var(--mist-dim); }
+.rcard dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.closed { color: var(--serious); }
+
+/* HUD */
+.hud {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px 22px; align-items: center;
+  padding: 12px 16px;
+}
+.meter-label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--mist-dim); margin-bottom: 5px; }
+.meter-label strong { font-family: var(--f-display); font-weight: 400; font-size: 15px; color: var(--mist); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar { height: 12px; border-radius: 999px; background: var(--land); overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; transition: width .4s ease; }
+.bar .b-chill { background: var(--blush); }
+.bar .b-happy { background: var(--yuzu); }
+.bar .b-cure { background: var(--serious); }
+.legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; color: var(--mist-dim); margin-top: 5px; font-variant-numeric: tabular-nums; }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+.evolve {
+  border: 0; cursor: pointer; border-radius: 18px; padding: 10px 18px;
+  background: var(--yuzu); color: var(--ink); font-family: var(--f-display); font-size: 19px; line-height: 1.15;
+  box-shadow: 0 4px 0 var(--yuzu-deep); transition: transform .1s;
+}
+.evolve small { display: block; font-size: 13px; opacity: .8; }
+.evolve:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--yuzu-deep); }
+.evolve.ready { animation: nudge 1.8s ease-in-out infinite; }
+@keyframes nudge { 0%, 100% { transform: none; } 50% { transform: translateY(-3px); } }
+@media (max-width: 640px) {
+  .hud { grid-template-columns: minmax(0, 1fr) auto; }
+  .hud .cure { grid-column: 1; grid-row: 2; }
+  .hud .evolve { grid-column: 2; grid-row: 1 / span 2; }
+  .brand span { font-size: 18px; }
+}
+
+/* overlays */
+.overlay {
+  position: fixed; inset: 0; z-index: 10; background: var(--scrim); display: grid; place-items: center; overflow: auto;
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+}
+.panel {
+  width: 100%; max-width: 640px; max-height: 100%; overflow: auto;
+  background: var(--pond); border: 1px solid var(--line); border-radius: 22px; padding: 24px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+}
+.hero-capy { display: block; width: min(260px, 70%); margin: 0 auto 4px; }
+.steam path { fill: none; stroke-width: 3; stroke-linecap: round; opacity: .45; animation: steam 3s ease-in-out infinite; }
+.steam path:nth-child(2) { animation-delay: .8s; } .steam path:nth-child(3) { animation-delay: 1.6s; }
+@keyframes steam { 0%, 100% { opacity: .15; transform: translateY(4px); } 50% { opacity: .55; transform: translateY(-4px); } }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(30px, 7vw, 42px); line-height: 1.1; margin: 0 0 6px; text-align: center; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--yuzu); }
+.lede { text-align: center; color: var(--mist-dim); margin: 0 auto 18px; max-width: 34em; text-wrap: balance; }
+.howto { display: grid; gap: 8px; margin: 0 0 20px; padding: 0; list-style: none; }
+.howto li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; font-size: 14px; }
+.howto li span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--pond-2); font-family: var(--f-display); color: var(--yuzu); }
+.field { display: grid; gap: 6px; margin-bottom: 14px; }
+.field > label, .field > .flabel { font-size: 13px; color: var(--mist-dim); letter-spacing: .02em; }
+input[type="text"] {
+  font: inherit; font-family: var(--f-display); font-size: 18px; color: var(--mist);
+  background: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; width: 100%; box-sizing: border-box;
+}
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg button {
+  cursor: pointer; border-radius: 12px; border: 1px solid var(--line); background: var(--ink); padding: 8px 6px; text-align: center;
+}
+.seg button b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 17px; }
+.seg button small { color: var(--mist-dim); font-size: 12px; }
+.seg button[aria-pressed="true"] { border-color: var(--yuzu); background: var(--pond-2); }
+.seg button[aria-pressed="true"] b { color: var(--yuzu); }
+.primary {
+  display: block; width: 100%; border: 0; cursor: pointer; border-radius: 16px; padding: 12px;
+  background: var(--yuzu); color: var(--ink); font-family: var(--f-display); font-size: 20px; box-shadow: 0 4px 0 var(--yuzu-deep);
+}
+.primary.small { width: auto; display: inline-block; font-size: 16px; padding: 6px 14px; border-radius: 999px; box-shadow: none; }
+.primary:disabled { background: var(--land); color: var(--mist-dim); box-shadow: none; cursor: not-allowed; }
+
+/* evolve modal */
+.evo { max-width: 880px; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.evo-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 18px 20px 12px; border-bottom: 1px solid var(--line); }
+.evo-head h2 { margin: 0 auto 0 0; font-family: var(--f-display); font-weight: 400; font-size: 24px; }
+.meters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 12px 20px; }
+.meters .bar { height: 9px; }
+.tabs { display: flex; gap: 6px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.tabs button {
+  border: 0; background: none; cursor: pointer; padding: 10px 14px 9px; font-family: var(--f-display); font-size: 17px; color: var(--mist-dim);
+  border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.tabs button[aria-selected="true"] { color: var(--yuzu); border-bottom-color: var(--yuzu); }
+.lines { padding: 14px 20px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; overflow: auto; min-height: 0; flex: 1 1 auto; }
+.line { min-width: 0; display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: center; }
+.line > span { font-size: 12px; color: var(--mist-dim); letter-spacing: .03em; }
+.chain { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 3px 2px; }
+.chain .arrow { color: var(--line); flex: none; font-size: 14px; }
+.trait {
+  flex: none; cursor: pointer; text-align: left; min-width: 112px; max-width: 160px;
+  border-radius: 14px; border: 2px solid var(--line); background: var(--pond-2); padding: 7px 11px;
+}
+.trait b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 15px; line-height: 1.25; }
+.trait small { font-size: 12px; color: var(--mist-dim); font-variant-numeric: tabular-nums; }
+.trait[data-state="open"].afford { border-color: var(--yuzu); }
+.trait[data-state="owned"] { background: var(--yuzu); border-color: var(--yuzu); color: var(--ink); }
+.trait[data-state="owned"] small { color: var(--ink); opacity: .7; }
+.trait[data-state="locked"] { opacity: .45; }
+.trait[aria-current="true"] { box-shadow: 0 0 0 3px var(--mist); }
+.detail { border-top: 1px solid var(--line); padding: 14px 20px 18px; display: grid; grid-template-columns: 220px minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; }
+.detail > div { min-width: 0; }
+.portrait {
+  display: block; width: 220px; height: 164px; border-radius: 16px;
+  background: radial-gradient(70% 70% at 50% 60%, var(--pond-2), var(--ink));
+}
+.portrait.big { width: min(300px, 86%); height: 210px; margin: 0 auto 10px; }
+.detail h3 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 20px; }
+.detail p { margin: 2px 0 6px; color: var(--mist-dim); font-size: 14px; max-width: 46em; }
+.detail .chips { margin: 0; }
+@media (max-width: 640px) {
+  .topbar { gap: 6px 8px; padding: 8px 12px 4px; }
+  .brand { flex: 1 1 100%; }
+  .pill { font-size: 14px; padding: 3px 9px; }
+  .speed { margin-left: auto; }
+  .speed button { padding: 4px 10px; font-size: 14px; }
+  .ticker { padding: 0 12px 6px; }
+  .ticker p { font-size: 13px; }
+  .hud { padding: 8px 12px; gap: 6px 12px; }
+  .legend { font-size: 11px; gap: 0 8px; }
+  .evolve { padding: 10px 14px; font-size: 17px; }
+  .rcard { left: 8px; bottom: 8px; width: min(220px, calc(100% - 72px)); padding: 10px 12px; }
+  .rcard h3 { font-size: 17px; }
+  .rcard dl { font-size: 13px; }
+  .zoom { right: 8px; bottom: 8px; }
+  .panel { padding: 18px; border-radius: 18px; }
+  .hero-capy { width: min(200px, 60%); }
+  .howto { gap: 6px; margin-bottom: 14px; }
+  /* evolve becomes a full-screen sheet */
+  #evoScreen { padding: 0; place-items: stretch; }
+  .evo { max-width: none; height: 100%; max-height: none; border: 0; border-radius: 0; }
+  .evo-head { padding: max(14px, env(safe-area-inset-top, 0px)) 16px 10px; }
+  .evo-head h2 { font-size: 21px; }
+  .meters, .lines { padding-inline: 16px; }
+  .tabs { padding: 0 12px; }
+  .tabs button { flex: 1; padding-inline: 4px; }
+  .detail { padding: 12px 16px max(14px, env(safe-area-inset-bottom, 0px)); }
+  .detail .primary.small { width: 100%; padding: 10px; font-size: 17px; }
+  .trait { min-width: 104px; }
+}
+@media (max-width: 560px) {
+  .meters { grid-template-columns: 1fr; gap: 6px; }
+  .detail { grid-template-columns: 130px minmax(0, 1fr); }
+  .portrait { width: 130px; height: 108px; }
+  #detailBuy { grid-column: 1 / -1; }
+  .line { grid-template-columns: 1fr; gap: 4px; }
+}
+
+.end { text-align: center; }
+.end .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 18px 0 20px; }
+.end .stats div { background: var(--ink); border-radius: 14px; padding: 10px; }
+.end .stats b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 22px; font-variant-numeric: tabular-nums; }
+.end .stats small { color: var(--mist-dim); font-size: 12px; }
+
+/* phone held sideways: keep the map as tall as possible */
+@media (max-height: 520px) {
+  .topbar { padding-block: 5px 3px; }
+  .brand { flex: 0 1 auto; }
+  .ticker { padding-bottom: 4px; }
+  .ticker p { -webkit-line-clamp: 1; }
+  .hud { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; padding-block: 5px; }
+  .hud .cure, .hud .evolve { grid-column: auto; grid-row: auto; }
+  .legend { display: none; }
+  .evolve { padding: 6px 14px; }
+  .evolve small { display: inline; margin-left: 6px; }
+  .zoom { grid-auto-flow: column; }
+  .zoom button { width: 34px; height: 34px; }
+  .rcard dl { grid-template-columns: auto 1fr auto 1fr; }
+  #evoScreen { padding: 0; place-items: stretch; }
+  .evo { max-width: none; height: 100%; max-height: none; border-radius: 0; border: 0; }
+  .meters { padding-block: 6px; }
+  .portrait { width: 110px; height: 84px; }
+  .portrait.big { height: 150px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 34 26" aria-hidden="true">
+        <rect x="9" y="9" width="24" height="15" rx="7" class="f-fur"/>
+        <rect x="2" y="7" width="17" height="15" rx="6" class="f-fur"/>
+        <rect x="1" y="13" width="10" height="9" rx="4" class="f-furd"/>
+        <circle cx="10" cy="5" r="4.5" class="f-yuzu"/>
+        <path d="M11 12 q2 -1.6 4 0" class="s-ink" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </svg>
+      <span id="virusName">행복바이러스</span>
+    </div>
+    <div class="pill" title="유자: 진화에 쓰는 포인트">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="11.5" r="7.5" class="f-yuzu"/><ellipse cx="13" cy="4" rx="3.6" ry="1.8" transform="rotate(-28 13 4)" class="f-leaf"/></svg>
+      <span id="yuzuCount">0</span>
+    </div>
+    <div class="pill" id="dateLabel">2026.10.02</div>
+    <div class="speed" role="group" aria-label="게임 속도">
+      <button type="button" data-speed="0" aria-pressed="true" aria-label="일시정지">❙❙</button>
+      <button type="button" data-speed="1" aria-pressed="false">1×</button>
+      <button type="button" data-speed="2" aria-pressed="false">2×</button>
+      <button type="button" data-speed="3" aria-pressed="false">3×</button>
+    </div>
+  </header>
+
+  <div class="ticker" aria-live="polite"><p id="tickerText"><b>소식</b>카피바라가 온천에서 기지개를 켜고 있어요.</p></div>
+
+  <main class="mapwrap" id="mapwrap">
+    <canvas id="map" aria-label="세계 지도. 노란 점은 행복해진 사람들, 분홍 점은 완전히 느긋해진 사람들입니다."></canvas>
+    <div class="banner" id="pickBanner" hidden>
+      <span id="pickText">카피바라가 처음 나타날 지역을 지도에서 고르세요</span>
+      <button type="button" class="primary small" id="pickGo" hidden>여기서 시작</button>
+    </div>
+    <div class="zoom" role="group" aria-label="지도 확대">
+      <button type="button" id="zoomIn" aria-label="확대">+</button>
+      <button type="button" id="zoomOut" aria-label="축소">−</button>
+      <button type="button" id="zoomReset" aria-label="전체 보기">⤢</button>
+    </div>
+    <div class="rcard" id="rcard" hidden>
+      <div class="rhead"><h3 id="rName"></h3><button type="button" class="xbtn" id="rClose" aria-label="지역 정보 닫기">×</button></div>
+      <div class="chips" id="rTags"></div>
+      <dl>
+        <dt>인구</dt><dd id="rPop"></dd>
+        <dt>행복</dt><dd id="rHappy"></dd>
+        <dt>느긋</dt><dd id="rChill"></dd>
+        <dt>공항</dt><dd id="rAir"></dd>
+        <dt>항구</dt><dd id="rPort"></dd>
+      </dl>
+    </div>
+  </main>
+
+  <footer class="hud">
+    <div class="world">
+      <div class="meter-label"><span>세계 행복도</span><strong id="worldPct">0%</strong></div>
+      <div class="bar"><i class="b-chill" id="barChill" style="width:0"></i><i class="b-happy" id="barHappy" style="width:0"></i></div>
+      <div class="legend">
+        <span style="--c: var(--yuzu)" id="lgHappy">행복 0명</span>
+        <span style="--c: var(--blush)" id="lgChill">느긋 0명</span>
+        <span style="--c: var(--land)" id="lgNormal">바쁨 82억</span>
+      </div>
+    </div>
+    <div class="cure">
+      <div class="meter-label"><span id="cureLabel">진지함 백신</span><strong id="curePct">—</strong></div>
+      <div class="bar"><i class="b-cure" id="barCure" style="width:0"></i></div>
+      <div class="legend"><span style="--c: var(--serious)" id="cureNote">세계근엄기구는 아직 아무것도 몰라요</span></div>
+    </div>
+    <button type="button" class="evolve" id="evolveBtn">진화하기<small id="evolveSub">유자 0개</small></button>
+  </footer>
+</div>
+
+<!-- start -->
+<div class="overlay" id="startScreen">
+  <div class="panel">
+    <svg class="hero-capy" viewBox="0 0 240 160" aria-hidden="true">
+      <g class="steam s-mist">
+        <path d="M168 44 q-7 -9 0 -18 q7 -9 0 -18"/>
+        <path d="M190 52 q-7 -9 0 -18 q7 -9 0 -18"/>
+        <path d="M212 46 q-7 -9 0 -18 q7 -9 0 -18"/>
+      </g>
+      <ellipse cx="142" cy="104" rx="80" ry="40" class="f-fur"/>
+      <rect x="34" y="56" width="92" height="66" rx="30" class="f-fur"/>
+      <rect x="26" y="82" width="50" height="40" rx="18" class="f-furd"/>
+      <ellipse cx="40" cy="92" rx="3" ry="5" class="f-ink"/>
+      <path d="M74 76 q7 -6 14 0" class="s-ink" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="96" cy="92" rx="8" ry="4.5" class="f-blush"/>
+      <ellipse cx="108" cy="58" rx="9" ry="7" class="f-furd"/>
+      <circle cx="74" cy="44" r="15" class="f-yuzu"/>
+      <ellipse cx="83" cy="28" rx="7" ry="3.5" transform="rotate(-30 83 28)" class="f-leaf"/>
+      <path d="M0 114 q20 -8 40 0 t40 0 t40 0 t40 0 t40 0 t40 0 V160 H0 Z" class="f-water"/>
+    </svg>
+    <h1>카피바라 <em>행복바이러스</em></h1>
+    <p class="lede">세상은 너무 바빠요. 카피바라 한 마리가 이유 없는 행복을 퍼뜨리기 시작합니다. 세계근엄기구가 진지함 백신을 완성하기 전에 온 인류를 느긋하게 만드세요.</p>
+    <ul class="howto">
+      <li><span>1</span><div>지도에 떠오르는 <b>유자</b>를 눌러 모으세요. 행복한 사람이 늘어날 때도 유자가 생겨요.</div></li>
+      <li><span>2</span><div><b>진화하기</b>에서 전파 경로, 증상, 능력을 사서 더 멀리, 더 빨리 퍼뜨리세요.</div></li>
+      <li><span>3</span><div>눈에 너무 띄면 백신 연구가 빨라지고 공항이 닫혀요. <b>느긋함</b>이 높으면 연구원들이 퇴근해 버려요.</div></li>
+    </ul>
+    <div class="field">
+      <label for="nameInput">바이러스 이름</label>
+      <input type="text" id="nameInput" maxlength="16" value="행복바이러스" autocomplete="off">
+    </div>
+    <div class="field">
+      <span class="flabel">세상의 바쁨 정도</span>
+      <div class="seg" id="diffSeg">
+        <button type="button" data-diff="easy" aria-pressed="false"><b>느긋</b><small>주 4일 근무</small></button>
+        <button type="button" data-diff="normal" aria-pressed="true"><b>보통</b><small>칼퇴는 가끔</small></button>
+        <button type="button" data-diff="hard" aria-pressed="false"><b>바쁨</b><small>야근 공화국</small></button>
+      </div>
+    </div>
+    <button type="button" class="primary" id="startBtn">시작 지역 고르기</button>
+  </div>
+</div>
+
+<!-- evolve -->
+<div class="overlay" id="evoScreen" hidden>
+  <div class="panel evo" role="dialog" aria-modal="true" aria-labelledby="evoTitle">
+    <div class="evo-head">
+      <h2 id="evoTitle">진화하기</h2>
+      <div class="pill"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="11.5" r="7.5" class="f-yuzu"/><ellipse cx="13" cy="4" rx="3.6" ry="1.8" transform="rotate(-28 13 4)" class="f-leaf"/></svg><span id="evoYuzu">0</span></div>
+      <button type="button" class="xbtn" id="evoClose" aria-label="진화 창 닫기">×</button>
+    </div>
+    <div class="meters">
+      <div><div class="meter-label"><span>전염성</span><strong id="mInf">0</strong></div><div class="bar"><i class="b-happy" id="mInfBar"></i></div></div>
+      <div><div class="meter-label"><span>눈에 띔</span><strong id="mSev">0</strong></div><div class="bar"><i class="b-cure" id="mSevBar"></i></div></div>
+      <div><div class="meter-label"><span>느긋함</span><strong id="mChl">0</strong></div><div class="bar"><i class="b-chill" id="mChlBar"></i></div></div>
+    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="lines" id="lines"></div>
+    <div class="detail" id="detail">
+      <canvas class="portrait" id="evoCapy" aria-hidden="true"></canvas>
+      <div id="detailInfo"></div>
+      <div id="detailBuy"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ending -->
+<div class="overlay" id="endScreen" hidden>
+  <div class="panel end">
+    <canvas class="portrait big" id="endCapy" aria-hidden="true"></canvas>
+    <h1 id="endTitle"></h1>
+    <p class="lede" id="endText"></p>
+    <div class="stats" id="endStats"></div>
+    <button type="button" class="primary" id="againBtn">다시 하기</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const rs = getComputedStyle(document.documentElement);
+const COL = {};
+for (const k of ['ink','pond','pond-2','line','mist','mist-dim','fur','fur-dark','yuzu','yuzu-deep','blush','serious','land','land-sel','leaf','wood','duck','scarf','water']) {
+  COL[k] = rs.getPropertyValue('--' + k).trim();
+}
+
+// ---------- world ----------
+// ellipses: [lon, lat, rx, ry, rotationDeg]
+const REGIONS = [
+  { id:'na', name:'북미', pop:3.8e8, tags:['cold','rich'], air:[-98,40], port:[-74,40],
+    ell:[[-100,50,32,18],[-150,63,13,8],[-75,47,14,10],[-95,66,30,9],[-42,72,13,8],[-115,38,12,9],[-84,33,9,5],[-81,28,3,4]],
+    news:'미국: 회의 도중 이유 없이 미소 짓는 직장인 다수 보고' },
+  { id:'ca', name:'중미·카리브', pop:1.8e8, tags:['hot','humid','mid'], air:[-99,19], port:[-80,9],
+    ell:[[-102,23,12,8,-30],[-88,15,6,5,-35],[-78,21,6,2]],
+    news:'멕시코: 해먹 판매량 세 배로 늘어. "그냥 누워 있고 싶어서요"' },
+  { id:'sa', name:'남미', pop:4.4e8, tags:['hot','humid','mid','home'], air:[-55,-14], port:[-43,-23],
+    ell:[[-62,-5,20,13],[-65,-28,9,18],[-45,-12,10,10],[-70,-45,5,9]],
+    news:'브라질: 강가에서 카피바라와 나란히 앉아 멍때리는 사람들 목격' },
+  { id:'weu', name:'서유럽', pop:4.2e8, tags:['cold','rich'], air:[2,49], port:[4,52],
+    ell:[[3,47,9,6],[-3,53,3,4],[-4,40,5,4],[15,63,6,9,20],[12,43,3,5,-40],[14,51,4,4]],
+    news:'프랑스: 파업 대신 단체 낮잠. 노조 "이쪽이 더 좋다"' },
+  { id:'eeu', name:'동유럽·러시아', pop:2.9e8, tags:['cold','mid'], air:[37,55], port:[30,60],
+    ell:[[35,54,16,9],[95,62,45,12],[140,62,15,8],[60,52,12,8]],
+    news:'러시아: 사우나 앞에 카피바라 대기줄. 아무도 서두르지 않아' },
+  { id:'mena', name:'중동·북아프리카', pop:6.2e8, tags:['hot','arid','mid'], air:[55,25], port:[31,31],
+    ell:[[10,26,23,9],[45,24,10,9,-30],[62,38,15,7],[34,39,9,3]],
+    news:'두바이: 사막 한가운데 정체불명의 노천 온천 등장' },
+  { id:'ssa', name:'아프리카', pop:1.3e9, tags:['hot','poor'], air:[37,-1], port:[18,-33],
+    ell:[[20,2,18,12],[25,-20,11,13],[-2,11,14,6],[40,6,7,6],[47,-19,2.5,6]],
+    news:'케냐: 사파리 관광객, 사자보다 카피바라 사진을 더 찍어' },
+  { id:'sas', name:'남아시아', pop:2.05e9, tags:['hot','humid','poor'], air:[77,28], port:[72,19],
+    ell:[[78,24,11,7],[77,14,5,6],[69,30,6,4]],
+    news:'인도: 릭샤 기사들 "오늘은 천천히 가도 괜찮아요"' },
+  { id:'eas', name:'동아시아', pop:1.45e9, tags:['cold','mid'], air:[116,40], port:[121,31],
+    ell:[[105,33,18,11],[103,46,16,5],[88,35,10,6]],
+    news:'중국: 판다 사육사 "판다가 카피바라를 질투한다"' },
+  { id:'kj', name:'한국·일본', pop:1.75e8, tags:['cold','rich','onsen'], air:[139.5,35.7], port:[129,35],
+    ell:[[127.5,37,2.8,3.8],[137,36,3,7,-40],[142,43,2.5,2]], label:[148,42],
+    news:'일본: 료칸마다 카피바라 동반 입욕 문의 폭주. 한국: 찜질방 양머리 대신 귤머리 유행' },
+  { id:'sea', name:'동남아시아', pop:6.9e8, tags:['hot','humid','poor'], air:[104,1.3], port:[107,-6],
+    ell:[[102,16,6,7],[110,-1,15,4,-10],[122,12,2.5,5],[117,1,5,4]],
+    news:'태국: 툭툭 기사들, 손님을 태우고 연못 구경을 다녀와' },
+  { id:'oce', name:'오세아니아', pop:4.6e7, tags:['hot','arid','rich'], air:[149,-34], port:[153,-28],
+    ell:[[134,-25,17,10],[145,-36,6,4],[173,-41,2,5,40],[144,-6,6,3]],
+    news:'호주: 캥거루와 카피바라, 같은 물웅덩이에서 포착' },
+];
+const IDX = Object.fromEntries(REGIONS.map((r, i) => [r.id, i]));
+const TOTAL = REGIONS.reduce((s, r) => s + r.pop, 0);
+const LAND = [['na','ca'],['ca','sa'],['weu','eeu'],['weu','mena'],['eeu','mena'],['eeu','eas'],['mena','ssa'],['mena','sas'],['sas','eas'],['sas','sea'],['eas','sea'],['eas','kj']].map(p => p.map(id => IDX[id]));
+const BIRD = [['na','eeu'],['weu','na'],['sea','oce'],['kj','oce'],['ssa','sa']].map(p => p.map(id => IDX[id]));
+const TAG_LABEL = { cold:'추움', hot:'더움', arid:'건조', humid:'습함', rich:'부유', mid:'보통', poor:'소박', onsen:'온천', home:'카피바라 고향' };
+
+const DIFF = {
+  easy:   { label:'느긋', spread:1.15, cure:0.0008, yuzu:6 },
+  normal: { label:'보통', spread:1.0,  cure:0.0011, yuzu:4 },
+  hard:   { label:'바쁨', spread:0.9,  cure:0.0015, yuzu:3 },
+};
+
+// ---------- traits ----------
+const T = (tab, line, id, name, cost, req, fx, desc) => ({ tab, line, id, name, cost, req, fx, desc });
+const TRAITS = [
+  T('spread','쓰다듬기','pet1','털 쓰다듬기',7,[],{inf:2},'까슬까슬한 털을 한 번 쓰다듬으면 마음이 풀려요.'),
+  T('spread','쓰다듬기','pet2','단체 쓰다듬기',14,['pet1'],{inf:3},'줄을 서서 차례로 쓰다듬는 문화가 생겼어요.'),
+  T('spread','온천','spa1','노천 온천',9,[],{inf:2,water:1},'따뜻한 물에 함께 몸을 담그면 행복이 번져요. 추운 지역과 온천 지역에서 효과가 커요.'),
+  T('spread','온천','spa2','유자탕',16,['spa1'],{inf:3,water:1},'온천에 유자를 띄웠어요. 향기만 맡아도 옮아요.'),
+  T('spread','나눠먹기','food1','귤 나눠먹기',8,[],{inf:2,food:1},'카피바라는 귤을 혼자 먹지 않아요. 소박한 지역에서 잘 퍼져요.'),
+  T('spread','나눠먹기','food2','수박 파티',15,['food1'],{inf:3,food:1},'한 통을 동네 사람 모두와 나눠 먹어요.'),
+  T('spread','동물 친구','ani1','등에 앉은 새',10,[],{inf:2,land:1},'카피바라 등에 새가 앉아 쉬어요. 이웃 지역으로 육로 전파가 쉬워져요.'),
+  T('spread','동물 친구','ani2','철새 노선',18,['ani1'],{inf:3,land:1},'철새가 행복을 바다 건너로 실어 날라요. 공항이 닫힌 섬에도 갈 수 있어요.'),
+  T('spread','하늘길','air1','비행기 옆자리',10,[],{inf:1,air:1},'옆자리 승객이 카피바라 사진을 보여줬어요. 비행기로 더 잘 퍼져요.'),
+  T('spread','하늘길','air2','기내 힐링 방송',18,['air1'],{inf:2,air:1},'기장님이 카피바라 다큐멘터리를 틀었어요.'),
+  T('spread','뱃길','sea1','크루즈 노천탕',9,[],{inf:1,sea:1},'갑판 위 온천에서 행복이 번져요. 배로 더 잘 퍼져요.'),
+  T('spread','뱃길','sea2','느긋한 화물선',16,['sea1'],{inf:2,sea:1},'선원들이 출항을 서두르지 않고 항구마다 오래 머물러요.'),
+  T('spread','온라인','meme1','숏폼 밈',20,['pet1','air1'],{inf:4,meme:1,sev:1},'카피바라 영상이 알고리즘을 점령했어요. 바쁜 부자 나라에서도 퍼져요.'),
+  T('spread','온라인','meme2','Ok I pull up 챌린지',28,['meme1'],{inf:6,meme:1,sev:3},'전 세계가 같은 노래에 맞춰 물에 둥둥 떠요. 눈에 많이 띄어요.'),
+
+  T('symptom','미소','smile','은은한 미소',3,[],{inf:1,sev:1},'입꼬리가 아주 조금 올라가요. 아무도 눈치채지 못해요.'),
+  T('symptom','미소','hum','콧노래',5,['smile'],{inf:2,sev:2},'출근길 지하철에서 흥얼거리는 사람이 늘어요.'),
+  T('symptom','미소','yuzuhead','머리 위의 귤',9,['hum'],{inf:3,sev:4},'머리에 귤을 올려도 신경 쓰지 않아요. 사진이 퍼져요.'),
+  T('symptom','하품','yawn','하품',4,[],{inf:2,sev:1},'옆 사람의 하품은 언제나 옮아요.'),
+  T('symptom','하품','float','물에 둥둥',10,['yawn'],{inf:3,sev:3},'욕조, 수영장, 분수대. 물만 보면 일단 떠 있어요.'),
+  T('symptom','하품','nap','점심 낮잠',12,['yawn'],{sev:4,chl:3},'점심을 먹고 잠깐 눈을 붙여요. 일하는 사람이 줄어요.'),
+  T('symptom','평온','calm','무표정 평온',6,['smile'],{sev:1,chl:1},'무슨 일이 생겨도 카피바라 얼굴로 바라봐요.'),
+  T('symptom','평온','slow','느긋한 걸음',10,['calm'],{sev:3,chl:3},'횡단보도 신호가 바뀌어도 뛰지 않아요.'),
+  T('symptom','퇴근','nowork','야근 거부',18,['nap'],{sev:6,chl:6},'6시 정각에 노트북을 덮어요. 백신 연구원도 예외가 아니에요.'),
+  T('symptom','퇴근','noalarm','알람 시계 해체',22,['nowork'],{sev:5,chl:8},'눈이 떠질 때 일어나요. 연구소 출근율이 크게 떨어져요.'),
+  T('symptom','궁극','friends','모든 생물과 친구',25,['yuzuhead','float'],{inf:6,sev:6,chl:3},'고양이, 오리, 악어까지 모두 친구가 돼요.'),
+  T('symptom','궁극','bath','전 인류 온천욕',40,['noalarm','friends'],{inf:5,sev:10,chl:12},'온 세상이 같은 날 같은 시간에 온천에 들어가요.'),
+
+  T('ability','추위','cold1','털 스웨터',12,[],{cold:1},'추운 지역에서도 덜 움츠러들어요.'),
+  T('ability','추위','cold2','두꺼운 겨울털',20,['cold1'],{cold:1},'눈 덮인 온천은 오히려 최고예요.'),
+  T('ability','더위','heat1','진흙 목욕',10,[],{heat:1},'더운 지역에서도 시원하게 지내요.'),
+  T('ability','더위','heat2','그늘 낮잠',18,['heat1'],{heat:1},'한낮에는 나무 그늘이 사무실이에요.'),
+  T('ability','건조','arid1','연못 찾기',11,[],{arid:1},'건조한 땅에서도 물웅덩이를 찾아내요.'),
+  T('ability','건조','arid2','오아시스 지도',19,['arid1'],{arid:1},'사막 한가운데에서도 쉴 곳을 알아요.'),
+  T('ability','부유국','rich1','커피 내성',15,[],{wealth:1},'에스프레소 세 잔으로도 행복을 막을 수 없어요. 부유한 나라에서 잘 퍼져요.'),
+  T('ability','부유국','rich2','성과급 무관심',25,['rich1'],{wealth:1},'승진 소식에도 눈만 한 번 깜빡여요.'),
+  T('ability','백신 방해','gene1','느긋한 유전자',20,[],{cure:1},'진지함 백신 연구가 6%p 후퇴하고, 이후 연구 속도가 15% 느려져요.'),
+  T('ability','백신 방해','gene2','더 느긋한 유전자',30,['gene1'],{cure:1},'연구원들이 실험 결과를 내일 보기로 해요.'),
+  T('ability','백신 방해','gene3','아주 느긋한 유전자',40,['gene2'],{cure:1},'백신 샘플이 온천물에 희석됐어요.'),
+];
+const TRAIT = Object.fromEntries(TRAITS.map(t => [t.id, t]));
+const TABS = [{ id:'spread', name:'전파' }, { id:'symptom', name:'증상' }, { id:'ability', name:'능력' }];
+const FX_LABEL = { inf:'전염성', sev:'눈에 띔', chl:'느긋함', cold:'추위 저항', heat:'더위 저항', arid:'건조 저항', water:'물가 전파', food:'음식 전파', land:'육로 전파', air:'항공 전파', sea:'해운 전파', wealth:'부유국 전파', meme:'부유국 전파' };
+const METER_MAX = { inf: 60, sev: 50, chl: 40 };
+
+const AMBIENT = [
+  '편의점 유자차 전국 품절',
+  '연구 결과: 카피바라 영상 10분은 낮잠 1시간과 같은 효과',
+  '알람 시계 제조사 주가 하락',
+  '직장인 설문: "월요일이 그렇게 싫지 않다" 41%',
+  '각국 회의 시간 평균 12분 단축',
+  '오리 단체, 카피바라 등에 앉을 권리 주장',
+  '온천 수건 수출량 사상 최대',
+  '경적 소리 민원 절반으로 줄어',
+  '고양이들, 카피바라 옆자리 놓고 신경전',
+  '귤 농가: "이렇게 많이 나눠 먹을 줄 몰랐다"',
+];
+const CURE_NEWS = [
+  [0.1, 'WSO, 진지함 백신 연구소 설립. 커피 무한 제공'],
+  [0.25, '진지함 백신 동물실험 시작. 카피바라는 협조를 거부'],
+  [0.5, 'WSO: "백신 절반 완성. 웃음 참기 훈련을 권고한다"'],
+  [0.75, '진지함 백신 임상 3상 돌입. 참가자 전원 무표정'],
+  [0.9, 'WSO 사무총장: "곧 세상이 다시 바빠질 것이다"'],
+];
+const WORLD_NEWS = [
+  [0.01, '전 세계 인구의 1%가 이유 없이 행복해졌어요'],
+  [0.1, '인류 열 명 중 한 명이 카피바라처럼 웃고 있어요'],
+  [0.25, '인류의 4분의 1이 느긋해졌어요. 출근길이 한산해요'],
+  [0.5, '인류의 절반이 행복바이러스에 걸렸어요'],
+  [0.75, '바쁜 사람이 이제 소수예요'],
+  [0.9, '거의 모두가 행복해요. 남은 건 마지막 바쁜 사람들'],
+];
+
+// ---------- dot map ----------
+const STEP = 1.8, ROWSTEP = STEP * 0.866, LAT_TOP = 80, LAT_BOT = -58;
+function ellDist(x, y, e) {
+  const [cx, cy, rx, ry, rot = 0] = e;
+  const a = -rot * Math.PI / 180, dx = x - cx, dy = y - cy;
+  const u = dx * Math.cos(a) - dy * Math.sin(a), v = dx * Math.sin(a) + dy * Math.cos(a);
+  return (u / rx) ** 2 + (v / ry) ** 2;
+}
+const dots = [];
+for (let row = 0, lat = LAT_TOP - ROWSTEP / 2; lat > LAT_BOT; row++, lat -= ROWSTEP) {
+  for (let lon = -180 + STEP / 2 + (row % 2 ? STEP / 2 : 0); lon < 180; lon += STEP) {
+    let best = -1, bd = 1;
+    REGIONS.forEach((R, i) => { for (const e of R.ell) { const d = ellDist(lon, lat, e); if (d <= bd) { bd = d; best = i; } } });
+    if (best >= 0) dots.push({ lon, lat, r: best, t: 2 });
+  }
+}
+REGIONS.forEach((R, i) => {
+  R.dots = [];
+  dots.forEach((d, k) => { if (d.r === i) R.dots.push(k); });
+  const n = R.dots.length;
+  R.center = R.label || [R.dots.reduce((s, k) => s + dots[k].lon, 0) / n, R.dots.reduce((s, k) => s + dots[k].lat, 0) / n];
+});
+function nearestDot(i, lon, lat) {
+  let best = REGIONS[i].dots[0], bd = Infinity;
+  for (const k of REGIONS[i].dots) { const d = (dots[k].lon - lon) ** 2 + (dots[k].lat - lat) ** 2; if (d < bd) { bd = d; best = k; } }
+  return best;
+}
+function orderRegion(i) {
+  const [sx, sy] = G.regions[i].seed;
+  const arr = REGIONS[i].dots.map(k => [k, Math.hypot(dots[k].lon - sx, dots[k].lat - sy) + Math.random() * STEP * 4]);
+  arr.sort((a, b) => a[1] - b[1]);
+  arr.forEach(([k], n) => { dots[k].t = n / arr.length; });
+}
+
+// ---------- state ----------
+let G, S;
+function newGame() {
+  return {
+    phase: 'title', name: '행복바이러스', diff: 'normal', day: 0, yuzu: 0, speed: 0, prevSpeed: 1,
+    owned: [], noticed: false, notice: 0, cure: 0, funding: 1, cureMult: 1,
+    planes: [], bubbles: [], floats: [], log2H: 0, log2C: 0, wm: 0, cm: 0, nextAmbient: 40,
+    pick: null, result: null, sel: -1,
+    regions: REGIONS.map(() => ({
+      H: 0, C: 0, seed: null, airOpen: true, portOpen: true, alert: 0,
+      thrAir: 25 + Math.random() * 30, thrPort: 45 + Math.random() * 35, m50: false, m100: false,
+    })),
+  };
+}
+function computeStats() {
+  S = { inf:0, sev:0, chl:0, cold:0, heat:0, arid:0, water:0, food:0, land:0, air:0, sea:0, wealth:0, meme:0 };
+  for (const id of G.owned) for (const [k, v] of Object.entries(TRAIT[id].fx)) if (k in S) S[k] += v;
+}
+function climate(i) {
+  let m = 1;
+  for (const t of REGIONS[i].tags) {
+    if (t === 'cold') m *= [0.55, 0.8, 1][S.cold] + 0.07 * S.water;
+    if (t === 'hot') m *= [0.75, 0.9, 1][S.heat];
+    if (t === 'arid') m *= [0.6, 0.82, 1][S.arid];
+    if (t === 'humid') m *= 1.05 + 0.06 * S.water;
+    if (t === 'rich') m *= [0.65, 0.85, 1][S.wealth] + 0.08 * S.meme;
+    if (t === 'poor') m *= 1.12 + 0.07 * S.food;
+    if (t === 'mid') m *= 0.95 + 0.04 * S.food;
+    if (t === 'onsen') m *= 1 + 0.12 * S.water;
+    if (t === 'home') m *= 1.15;
+  }
+  return m;
+}
+const frac = i => G.regions[i].H / REGIONS[i].pop;
+const worldHappy = () => G.regions.reduce((s, g) => s + g.H, 0);
+const worldChill = () => G.regions.reduce((s, g) => s + g.C, 0);
+
+// ---------- simulation ----------
+function seedRegion(i, lon, lat, text) {
+  const g = G.regions[i];
+  if (g.H >= 1) return;
+  const k = nearestDot(i, lon, lat);
+  g.H = 1;
+  g.seed = [dots[k].lon, dots[k].lat];
+  orderRegion(i);
+  addYuzu(2, dots[k].lon, dots[k].lat);
+  news(text || REGIONS[i].news);
+}
+function addYuzu(n, lon, lat) {
+  G.yuzu += n;
+  if (lon !== undefined) G.floats.push({ lon, lat, text: '+' + n, age: 0 });
+  updateHUD();
+}
+function pickOther(i, key) {
+  const c = [];
+  G.regions.forEach((g, j) => { if (j !== i && g[key]) c.push(j); });
+  return c.length ? c[Math.floor(Math.random() * c.length)] : -1;
+}
+function tryLand(a, b, mult) {
+  const ga = G.regions[a], gb = G.regions[b];
+  if (ga.H < 1 || gb.H >= 1) return;
+  const p = (0.12 + 0.15 * S.land) * Math.sqrt(frac(a)) * climate(b) * mult;
+  if (Math.random() < p) {
+    const [lon, lat] = REGIONS[a].center;
+    seedRegion(b, lon, lat, mult < 1 ? `${REGIONS[b].name}: 철새 떼가 행복을 싣고 도착했어요` : undefined);
+  }
+}
+
+function tickDay() {
+  G.day++;
+  const diff = DIFF[G.diff];
+  const rBase = (0.09 + S.inf * 0.012) * diff.spread;
+
+  // growth inside regions
+  G.regions.forEach((g, i) => {
+    if (g.H < 1) return;
+    const P = REGIONS[i].pop;
+    g.H = Math.min(P, g.H + rBase * climate(i) * g.H * (1 - g.H / P));
+    if (P - g.H < 1) g.H = P;
+    if (S.chl > 0) g.C = Math.min(g.H, g.C + 0.0015 * S.chl * (g.H - g.C) * (0.4 + 0.6 * g.H / P));
+    const f = g.H / P;
+    if (!g.m50 && f >= 0.5) { g.m50 = true; addYuzu(1); }
+    if (!g.m100 && f >= 1) { g.m100 = true; addYuzu(2); news(`${REGIONS[i].name}: 모든 사람이 행복해졌어요`); }
+  });
+
+  // land and bird routes
+  for (const [a, b] of LAND) { tryLand(a, b, 1); tryLand(b, a, 1); }
+  if (S.land >= 2) for (const [a, b] of BIRD) { tryLand(a, b, 0.5); tryLand(b, a, 0.5); }
+
+  // flights and ships
+  G.regions.forEach((g, i) => {
+    const f = frac(i);
+    if (g.airOpen && Math.random() < 0.8) {
+      const j = pickOther(i, 'airOpen');
+      if (j >= 0) G.planes.push({ type:'air', a:REGIONS[i].air, b:REGIONS[j].air, to:j, t:0, dur:2,
+        carry: g.H >= 1 && Math.random() < Math.min(0.95, Math.sqrt(f) * (0.8 + 0.8 * S.air)) });
+    }
+    if (g.portOpen && Math.random() < 0.4) {
+      const j = pickOther(i, 'portOpen');
+      if (j >= 0) G.planes.push({ type:'sea', a:REGIONS[i].port, b:REGIONS[j].port, to:j, t:0, dur:5,
+        carry: g.H >= 1 && Math.random() < Math.min(0.95, Math.sqrt(f) * (0.6 + 0.7 * S.sea)) });
+    }
+  });
+
+  const wH = worldHappy(), wf = wH / TOTAL;
+
+  // the World Seriousness Organization notices
+  if (!G.noticed) {
+    G.notice += wf * (1 + S.sev * 0.4) * 2 + S.sev * 0.0015;
+    if (G.notice >= 1) { G.noticed = true; news('세계근엄기구(WSO): "사람들이 이유 없이 웃고 있다. 조사에 착수한다"'); }
+  } else {
+    G.funding *= 1.004;
+    let work = 0, all = 0;
+    G.regions.forEach((g, i) => {
+      const R = REGIONS[i], w = R.tags.includes('rich') ? 1.6 : R.tags.includes('poor') ? 0.55 : 1;
+      work += (R.pop - g.C) * w; all += R.pop * w;
+    });
+    const urgency = Math.min(1, wf * 1.5 + S.sev / 30);
+    G.cure = Math.min(1, G.cure + diff.cure * G.funding * (work / all) * (0.4 + 0.6 * urgency) * G.cureMult);
+    while (G.cm < CURE_NEWS.length && G.cure >= CURE_NEWS[G.cm][0]) news(CURE_NEWS[G.cm++][1]);
+
+    // borders close as alarm builds
+    G.regions.forEach((g, i) => {
+      const R = REGIONS[i];
+      g.alert += (wf * 0.8 + frac(i) * 0.6 + S.sev / 60) * (R.tags.includes('rich') ? 1.4 : 1);
+      if (g.airOpen && g.alert > g.thrAir) { g.airOpen = false; news(`${R.name}: 공항 폐쇄. "행복 반입 금지"`); }
+      if (g.portOpen && g.alert > g.thrPort) { g.portOpen = false; news(`${R.name}: 항구 봉쇄. 크루즈 노천탕 운영 중단`); }
+    });
+  }
+
+  // yuzu bubbles
+  G.regions.forEach((g, i) => {
+    if (g.H < 1000) return;
+    const P = REGIONS[i].pop;
+    if (Math.random() < 0.05 + 0.08 * g.H / P) spawnBubble(i, 'yuzu', g.H / P);
+    if (g.C > 1000 && Math.random() < 0.01 + 0.03 * g.C / P) spawnBubble(i, 'chill', g.C / P);
+  });
+
+  // milestones
+  const l2 = Math.floor(Math.log2(wH + 1));
+  if (l2 > G.log2H) { addYuzu(l2 - G.log2H); G.log2H = l2; }
+  const l2c = Math.floor(Math.log2(worldChill() + 1));
+  if (l2c > G.log2C) { addYuzu(l2c - G.log2C); G.log2C = l2c; }
+  while (G.wm < WORLD_NEWS.length && wf >= WORLD_NEWS[G.wm][0]) news(WORLD_NEWS[G.wm++][1]);
+  if (G.day >= G.nextAmbient) { news(AMBIENT[Math.floor(Math.random() * AMBIENT.length)]); G.nextAmbient = G.day + 25 + Math.floor(Math.random() * 25); }
+
+  if (G.cure >= 1) return endGame(false);
+  if (G.regions.every((g, i) => g.H >= REGIONS[i].pop)) return endGame(true);
+  updateHUD();
+}
+
+function spawnBubble(i, kind, f) {
+  const R = REGIONS[i], fv = visFrac(kind === 'chill' ? G.regions[i].C : G.regions[i].H, R.pop);
+  const pool = R.dots.filter(k => dots[k].t < fv);
+  const k = pool.length ? pool[Math.floor(Math.random() * pool.length)] : nearestDot(i, ...G.regions[i].seed);
+  G.bubbles.push({ lon: dots[k].lon, lat: dots[k].lat, kind, val: kind === 'chill' ? 3 : 1 + (Math.random() < 0.35 ? 1 : 0), age: 0, life: 8 });
+}
+
+function movePlanes(dd) {
+  for (const p of G.planes) {
+    p.t += dd;
+    if (p.t >= p.dur && !p.done) {
+      p.done = true;
+      const g = G.regions[p.to];
+      const open = p.type === 'air' ? g.airOpen : g.portOpen;
+      if (p.carry && open && g.H < 1) {
+        const [lon, lat] = p.b;
+        seedRegion(p.to, lon, lat, `${REGIONS[p.to].name}: ${p.type === 'air' ? '비행기' : '배'}에서 내린 승객이 웃으며 입국했어요. ${REGIONS[p.to].news}`);
+      }
+    }
+  }
+  G.planes = G.planes.filter(p => !p.done);
+}
+
+function endGame(win) {
+  G.phase = 'over'; G.speed = 0; G.result = win ? 'win' : 'lose';
+  updateHUD(); showEnd();
+}
+
+// ---------- canvas ----------
+const canvas = $('#map'), ctx = canvas.getContext('2d'), wrap = $('#mapwrap');
+let cw = 0, ch = 0, dpr = 1;
+const view = { s: 1, s0: 1, z: 1, base: 0, baseY: 0, panX: 0, panY: 0 };
+const LAT_SPAN = LAT_TOP - LAT_BOT, ZOOM_MAX = 4;
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  cw = r.width; ch = r.height; dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+  const pad = 12;
+  const fit = Math.min((cw - pad * 2) / 360, (ch - pad * 2) / LAT_SPAN);
+  // phones: start zoomed so dots stay tappable; the rest of the world is a drag away
+  view.s0 = Math.max(fit, Math.min((ch - pad * 2) / LAT_SPAN, cw / 150));
+  layout();
+}
+function layout() {
+  view.s = view.s0 * view.z;
+  view.base = (cw - 360 * view.s) / 2;
+  view.baseY = (ch - LAT_SPAN * view.s) / 2;
+  clampPan();
+}
+function clampAxis(size, mapSize, base, pan) {
+  if (mapSize <= size - 24) return 0;
+  return Math.min(12, Math.max(size - 12 - mapSize, base + pan)) - base;
+}
+function clampPan() {
+  view.panX = clampAxis(cw, 360 * view.s, view.base, view.panX);
+  view.panY = clampAxis(ch, LAT_SPAN * view.s, view.baseY, view.panY);
+}
+const proj = (lon, lat) => [view.base + view.panX + (lon + 180) * view.s, view.baseY + view.panY + (LAT_TOP - lat) * view.s];
+const unproj = (x, y) => [(x - view.base - view.panX) / view.s - 180, LAT_TOP - (y - view.baseY - view.panY) / view.s];
+// zoom so that world point (lon, lat) lands on screen point (x, y)
+function zoomTo(z, lon, lat, x, y) {
+  view.z = Math.min(ZOOM_MAX, Math.max(1, z));
+  view.s = view.s0 * view.z;
+  view.base = (cw - 360 * view.s) / 2;
+  view.baseY = (ch - LAT_SPAN * view.s) / 2;
+  view.panX = x - view.base - (lon + 180) * view.s;
+  view.panY = y - view.baseY - (LAT_TOP - lat) * view.s;
+  clampPan();
+}
+function zoomBy(f, x = cw / 2, y = ch / 2) { const [lon, lat] = unproj(x, y); zoomTo(view.z * f, lon, lat, x, y); }
+
+function visFrac(n, P) {
+  if (n < 1) return 0;
+  return Math.max(n / P, 0.1 * Math.log10(n + 1) / Math.log10(P));
+}
+
+function capyFace(x, y, s) {
+  ctx.fillStyle = COL['fur-dark'];
+  ctx.beginPath(); ctx.arc(x - s * 0.55, y - s * 0.55, s * 0.28, 0, TAU); ctx.arc(x + s * 0.55, y - s * 0.55, s * 0.28, 0, TAU); ctx.fill();
+  ctx.fillStyle = COL.fur;
+  ctx.beginPath(); ctx.ellipse(x, y, s * 0.85, s * 0.72, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = COL['fur-dark'];
+  ctx.beginPath(); ctx.ellipse(x, y + s * 0.3, s * 0.5, s * 0.34, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = Math.max(1, s * 0.13); ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - s * 0.5, y - s * 0.12); ctx.quadraticCurveTo(x - s * 0.35, y - s * 0.28, x - s * 0.2, y - s * 0.12);
+  ctx.moveTo(x + s * 0.2, y - s * 0.12); ctx.quadraticCurveTo(x + s * 0.35, y - s * 0.28, x + s * 0.5, y - s * 0.12);
+  ctx.stroke();
+  ctx.fillStyle = COL.yuzu;
+  ctx.beginPath(); ctx.arc(x, y - s * 0.85, s * 0.32, 0, TAU); ctx.fill();
+}
+function yuzuIcon(x, y, r, kind) {
+  ctx.fillStyle = kind === 'chill' ? COL.blush : COL.yuzu;
+  ctx.strokeStyle = kind === 'chill' ? COL.ink : COL['yuzu-deep'];
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.stroke();
+  if (kind === 'chill') {
+    ctx.fillStyle = COL.ink; ctx.font = `${Math.round(r * 1.1)}px Jua, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('zz', x, y + 1);
+  } else {
+    ctx.fillStyle = COL.leaf;
+    ctx.beginPath(); ctx.ellipse(x + r * 0.45, y - r * 0.95, r * 0.5, r * 0.24, -0.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.3, r * 0.22, 0, TAU); ctx.fill();
+  }
+}
+// tiny side-view capybara for planes and tubs; dir = 1 faces right
+function capyRider(x, y, s, dir, yuzu) {
+  const bodyPath = () => {
+    ctx.beginPath();
+    ctx.ellipse(x - dir * s * 0.2, y, s * 0.75, s * 0.48, 0, 0, TAU);
+    ctx.moveTo(x + dir * s * 0.55 + s * 0.45, y - s * 0.25);
+    ctx.ellipse(x + dir * s * 0.55, y - s * 0.25, s * 0.45, s * 0.38, 0, 0, TAU);
+  };
+  // dark outline so the capybara reads against the map
+  ctx.strokeStyle = COL.ink; ctx.lineWidth = Math.max(1.5, s * 0.22); bodyPath(); ctx.stroke();
+  ctx.fillStyle = COL.fur; bodyPath(); ctx.fill();
+  ctx.fillStyle = COL['fur-dark'];
+  ctx.beginPath(); ctx.arc(x + dir * s * 0.88, y - s * 0.15, s * 0.22, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + dir * s * 0.32, y - s * 0.6, s * 0.14, 0, TAU); ctx.fill();
+  ctx.fillStyle = COL.ink;
+  ctx.beginPath(); ctx.arc(x + dir * s * 0.62, y - s * 0.36, Math.max(0.7, s * 0.08), 0, TAU); ctx.fill();
+  if (!yuzu) return;
+  ctx.fillStyle = COL.yuzu;
+  ctx.beginPath(); ctx.arc(x + dir * s * 0.5, y - s * 0.78, s * 0.24, 0, TAU); ctx.fill();
+}
+
+// ---------- capybara portrait: every trait shows up on the capybara ----------
+// head items stack in the order they were bought, the way real capybaras tolerate things piled on them
+const HEAD_H = { yuzuhead: 24, cold2: 20, sea1: 18, air1: 12, heat2: 14, friends: 24, bath: 10 };
+const FRONT_SLOTS = [16, 224, 38, 202, 60, 180, 82, 158, 104, 136];
+const FRONT_IDS = ['food1', 'food2', 'meme1', 'rich1', 'rich2', 'arid1', 'arid2', 'nowork', 'noalarm', 'slow'];
+let hopAt = 0;
+
+function drawPortrait(cv, owned, preview, now) {
+  const r = cv.getBoundingClientRect();
+  if (!r.width) return;
+  const dp = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.round(r.width * dp), H = Math.round(r.height * dp);
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const c = cv.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+
+  const ghost = preview && !owned.includes(preview) ? preview : null;
+  const list = ghost ? [...owned, ghost] : owned;
+  const has = id => list.includes(id);
+  const alpha = id => (id === ghost ? 0.4 : 1);
+  const t = reduced ? 0 : now;
+  const heads = list.filter(id => id in HEAD_H);
+  const stackH = heads.reduce((s, id) => s + HEAD_H[id], 0);
+  const top = Math.min(58 - stackH, 22), bottom = 162;
+  const sc = Math.min(W / 240, H / (bottom - top));
+  const hopT = (now - hopAt) / 600;
+  const hop = hopT >= 0 && hopT < 1 ? Math.sin(hopT * Math.PI) * 10 : 0;
+  c.translate((W - 240 * sc) / 2, (H - (bottom - top) * sc) / 2);
+  c.scale(sc, sc);
+  c.translate(0, -top);
+
+  const fill = (col, f) => { c.fillStyle = col; c.beginPath(); f(); c.fill(); };
+  const rr = (x, y, w, h, rad) => { if (c.roundRect) c.roundRect(x, y, w, h, rad); else c.rect(x, y, w, h); };
+  const on = (id, f) => { if (!has(id)) return; c.save(); c.globalAlpha = alpha(id); f(); c.restore(); };
+  const heart = (x, y, s) => fill(COL.blush, () => {
+    c.moveTo(x, y + s * 0.9);
+    c.bezierCurveTo(x - s * 1.4, y - s * 0.1, x - s * 0.6, y - s * 1.1, x, y - s * 0.35);
+    c.bezierCurveTo(x + s * 0.6, y - s * 1.1, x + s * 1.4, y - s * 0.1, x, y + s * 0.9);
+  });
+
+  // aura from the gene line
+  const genes = ['gene1', 'gene2', 'gene3'].filter(has);
+  genes.forEach((id, n) => on(id, () => {
+    c.strokeStyle = COL.blush; c.globalAlpha *= 0.5; c.lineWidth = 2; c.setLineDash([6, 8]); c.lineDashOffset = -t / 40 * (n % 2 ? -1 : 1);
+    c.beginPath(); c.ellipse(124, 100, 100 + n * 9, 56 + n * 7, 0, 0, TAU); c.stroke();
+  }));
+
+  // sky
+  on('ani2', () => {
+    c.strokeStyle = COL.mist; c.lineWidth = 2; c.lineCap = 'round';
+    for (const [x, y] of [[188, 30], [208, 40], [172, 42]]) {
+      const f = Math.sin(t / 250 + x) * 2;
+      c.beginPath(); c.moveTo(x - 7, y - 3 + f); c.quadraticCurveTo(x - 3, y - 4, x, y); c.quadraticCurveTo(x + 3, y - 4, x + 7, y - 3 + f); c.stroke();
+    }
+  });
+  on('pet1', () => heart(176, 62 + Math.sin(t / 400) * 2, 6));
+  on('pet2', () => { heart(196, 48 + Math.sin(t / 380 + 1) * 2, 5); heart(160, 44 + Math.sin(t / 420 + 2) * 2, 4); });
+  on('hum', () => {
+    c.fillStyle = COL.mist; c.font = '16px Jua, sans-serif'; c.textAlign = 'center';
+    c.fillText('♪', 28, 72 + Math.sin(t / 300) * 3); c.fillText('♫', 16, 56 + Math.sin(t / 340 + 1) * 3);
+  });
+
+  c.save(); c.translate(0, -hop);
+  // legs, body, back
+  if (!has('spa1')) {
+    fill(COL['fur-dark'], () => { rr(104, 120, 12, 16, 5); rr(150, 120, 12, 16, 5); });
+  }
+  fill(COL.fur, () => c.ellipse(132, 104, 56, 30, 0, 0, TAU));
+  on('heat1', () => { c.globalAlpha *= 0.55; fill(COL['fur-dark'], () => { c.ellipse(146, 94, 10, 5, 0.2, 0, TAU); c.moveTo(171, 110); c.ellipse(164, 110, 7, 4, 0, 0, TAU); c.moveTo(130, 114); c.ellipse(124, 114, 6, 4, 0, 0, TAU); }); });
+  on('ani1', () => {
+    fill(COL.serious, () => { c.ellipse(152, 70, 9, 6, -0.2, 0, TAU); c.moveTo(164.5, 64); c.arc(160, 64, 4.5, 0, TAU); });
+    fill(COL['yuzu-deep'], () => { c.moveTo(164, 63); c.lineTo(169, 65); c.lineTo(164, 66); });
+    fill(COL.ink, () => c.arc(161, 63, 1, 0, TAU));
+  });
+  // head
+  fill(COL.fur, () => rr(58, 66, 68, 50, 22));
+  fill(COL['fur-dark'], () => rr(50, 88, 40, 28, 12));
+  fill(COL['fur-dark'], () => c.ellipse(112, 68, 9, 7, 0, 0, TAU));
+  fill(COL.ink, () => c.ellipse(56, 96, 2.4, 4, 0, 0, TAU));
+  // eyes
+  c.strokeStyle = COL.ink; c.lineWidth = 3; c.lineCap = 'round';
+  if (has('meme2')) {
+    on('meme2', () => {
+      fill(COL.ink, () => { rr(72, 76, 24, 11, 4); });
+      c.strokeStyle = COL.ink; c.lineWidth = 2.5; c.beginPath(); c.moveTo(96, 80); c.lineTo(110, 76); c.stroke();
+      fill(COL.mist, () => rr(76, 78, 6, 2, 1));
+    });
+  }
+  if (!has('meme2') || ghost === 'meme2') {
+    if (has('nap')) { c.save(); c.globalAlpha = alpha('nap'); c.beginPath(); c.moveTo(77, 81); c.quadraticCurveTo(84, 86, 91, 81); c.stroke(); c.restore(); }
+    else if (has('calm')) { c.save(); c.globalAlpha = alpha('calm'); c.beginPath(); c.moveTo(78, 82); c.lineTo(91, 82); c.stroke(); c.restore(); }
+    else { fill(COL.ink, () => c.arc(84, 82, 3.4, 0, TAU)); fill(COL.mist, () => c.arc(85.2, 80.8, 1.1, 0, TAU)); }
+  }
+  on('smile', () => { c.strokeStyle = COL.ink; c.lineWidth = 2.2; c.beginPath(); c.moveTo(58, 107); c.quadraticCurveTo(65, 112, 72, 106); c.stroke(); });
+  if (has('smile') || has('hum')) { c.save(); c.globalAlpha = 0.5; fill(COL.blush, () => c.ellipse(100, 98, 8, 4.5, 0, 0, TAU)); c.restore(); }
+  on('cold1', () => {
+    fill(COL.scarf, () => { rr(114, 92, 22, 13, 6); rr(122, 102, 9, 20, 3); });
+    fill(COL.mist, () => { c.rect(124, 112, 5, 2); c.rect(124, 117, 5, 2); });
+  });
+  on('air2', () => {
+    c.strokeStyle = COL.ink; c.lineWidth = 4; c.beginPath(); c.arc(96, 86, 28, Math.PI * 1.08, Math.PI * 1.92); c.stroke();
+    fill(COL.ink, () => rr(112, 74, 11, 16, 5)); fill(COL.yuzu, () => c.arc(117.5, 82, 2.2, 0, TAU));
+  });
+
+  // the head stack
+  let b = 68;
+  heads.forEach((id, n) => {
+    const x = 90 + (n % 2 ? 3 : -3);
+    c.save(); c.globalAlpha = alpha(id);
+    c.translate(x, b); c.rotate((n % 2 ? 1 : -1) * 0.05 + Math.sin(t / 700 + n) * 0.02); c.translate(-x, -b);
+    drawHeadItem(c, id, x, b, fill, rr);
+    c.restore();
+    b -= HEAD_H[id];
+  });
+
+  on('float', () => {
+    c.lineWidth = 9; c.strokeStyle = COL.scarf; c.beginPath(); c.ellipse(130, 118, 64, 12, 0, 0, TAU); c.stroke();
+    c.strokeStyle = COL.mist; c.setLineDash([12, 12]); c.stroke(); c.setLineDash([]);
+  });
+  c.restore(); // end hop
+
+  // water
+  on('spa1', () => {
+    c.globalAlpha *= 0.88;
+    fill(COL.water, () => {
+      c.moveTo(0, 122);
+      for (let x = 0; x <= 240; x += 20) c.quadraticCurveTo(x + 10, 116 + Math.sin(t / 500 + x) * 2, x + 20, 122);
+      c.lineTo(240, 162); c.lineTo(0, 162); c.closePath();
+    });
+    c.globalAlpha = alpha('spa1') * (0.3 + 0.2 * Math.sin(t / 600));
+    c.strokeStyle = COL.mist; c.lineWidth = 2.5; c.lineCap = 'round';
+    for (const x of [30, 196, 218]) { c.beginPath(); c.moveTo(x, 112); c.quadraticCurveTo(x - 6, 102, x, 94); c.quadraticCurveTo(x + 6, 86, x, 78); c.stroke(); }
+  });
+  on('spa2', () => {
+    for (const [x, y] of [[34, 128], [180, 132], [206, 124]]) {
+      fill(COL.yuzu, () => c.arc(x, y + Math.sin(t / 450 + x) * 1.5, 5.5, 0, TAU));
+    }
+  });
+  on('sea2', () => fill(COL.mist, () => { const y = 136 + Math.sin(t / 500) * 1.5; c.moveTo(196, y); c.lineTo(226, y); c.lineTo(220, y + 7); c.lineTo(202, y + 7); c.closePath(); c.moveTo(211, y - 14); c.lineTo(211, y); c.lineTo(222, y); c.closePath(); }));
+
+  // things piled in front
+  list.filter(id => FRONT_IDS.includes(id)).forEach((id, n) => {
+    c.save(); c.globalAlpha = alpha(id);
+    drawFrontItem(c, id, FRONT_SLOTS[n % FRONT_SLOTS.length], 160, fill, rr, t);
+    c.restore();
+  });
+
+  // floating text
+  c.font = '13px Jua, sans-serif'; c.textAlign = 'left';
+  on('nap', () => { c.fillStyle = COL.mist; const z = (t / 900) % 1; c.globalAlpha *= 1 - z; c.fillText('z', 40, 64 - z * 14); c.font = '17px Jua, sans-serif'; c.fillText('Z', 28, 52 - z * 14); });
+  on('yawn', () => { c.fillStyle = COL['mist-dim']; c.fillText('하암~', 4, 122); });
+}
+
+function drawHeadItem(c, id, x, b, fill, rr) {
+  if (id === 'yuzuhead') {
+    fill(COL.yuzu, () => c.arc(x, b - 11, 11.5, 0, TAU));
+    fill(COL.leaf, () => c.ellipse(x + 6, b - 22, 6.5, 3, -0.5, 0, TAU));
+  } else if (id === 'cold2') {
+    fill(COL.scarf, () => c.arc(x, b, 20, Math.PI, 0));
+    fill(COL.mist, () => { rr(x - 21, b - 5, 42, 6, 3); c.moveTo(x + 5, b - 22); c.arc(x, b - 22, 5, 0, TAU); });
+  } else if (id === 'sea1') {
+    fill(COL.ink, () => c.ellipse(x, b - 3, 23, 4, 0, 0, TAU));
+    fill(COL.mist, () => rr(x - 15, b - 18, 30, 15, 5));
+    fill(COL.ink, () => c.rect(x - 15, b - 8, 30, 4));
+    fill(COL.yuzu, () => c.arc(x, b - 13, 3, 0, TAU));
+  } else if (id === 'air1') {
+    fill(COL.wood, () => rr(x - 22, b - 8, 44, 5, 2));
+    for (const dx of [-8, 8]) {
+      fill(COL.serious, () => c.arc(x + dx, b - 6, 6, 0, TAU));
+      c.strokeStyle = COL.wood; c.lineWidth = 2; c.beginPath(); c.arc(x + dx, b - 6, 6, 0, TAU); c.stroke();
+    }
+  } else if (id === 'heat2') {
+    fill(COL.leaf, () => c.ellipse(x, b - 7, 32, 7, -0.08, 0, TAU));
+    c.strokeStyle = COL.ink; c.globalAlpha *= 0.35; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 28, b - 6); c.lineTo(x + 28, b - 9); c.stroke();
+  } else if (id === 'friends') {
+    fill(COL.duck, () => { c.ellipse(x + 3, b - 8, 13, 8, 0, 0, TAU); c.moveTo(x - 1, b - 18); c.arc(x - 8, b - 18, 7, 0, TAU); });
+    fill(COL['yuzu-deep'], () => c.ellipse(x - 16, b - 17, 4.5, 2.2, 0, 0, TAU));
+    fill(COL.ink, () => c.arc(x - 9, b - 19.5, 1.3, 0, TAU));
+  } else if (id === 'bath') {
+    fill(COL.mist, () => rr(x - 17, b - 10, 34, 10, 3));
+    fill(COL.serious, () => c.rect(x - 17, b - 6, 34, 2));
+  }
+}
+
+function drawFrontItem(c, id, x, b, fill, rr, t) {
+  if (id === 'food1') {
+    fill(COL.yuzu, () => c.arc(x, b - 7, 7, 0, TAU));
+    fill(COL.leaf, () => c.ellipse(x + 3, b - 14, 3.5, 1.8, -0.5, 0, TAU));
+  } else if (id === 'food2') {
+    fill(COL.leaf, () => { c.moveTo(x - 10, b - 2); c.arc(x, b - 2, 10, Math.PI, 0); c.closePath(); });
+    fill(COL.scarf, () => { c.moveTo(x - 8, b - 2); c.arc(x, b - 2, 8, Math.PI, 0); c.closePath(); });
+    fill(COL.ink, () => { c.arc(x - 3, b - 5, 0.9, 0, TAU); c.moveTo(x + 3.9, b - 6); c.arc(x + 3, b - 6, 0.9, 0, TAU); });
+  } else if (id === 'meme1') {
+    fill(COL.ink, () => rr(x - 6, b - 18, 12, 18, 3));
+    fill(COL.yuzu, () => rr(x - 4.5, b - 16, 9, 12, 1.5));
+    fill(COL.fur, () => c.arc(x, b - 9, 2.6, 0, TAU));
+  } else if (id === 'rich1') {
+    fill(COL.mist, () => rr(x - 6, b - 12, 12, 12, 2));
+    fill(COL['fur-dark'], () => c.ellipse(x, b - 12, 6, 1.8, 0, 0, TAU));
+    c.strokeStyle = COL.mist; c.lineWidth = 2; c.beginPath(); c.arc(x + 7, b - 6, 3, -Math.PI / 2, Math.PI / 2); c.stroke();
+  } else if (id === 'rich2') {
+    fill(COL.mist, () => rr(x - 9, b - 11, 18, 11, 1.5));
+    c.strokeStyle = COL['mist-dim']; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 9, b - 11); c.lineTo(x, b - 5); c.lineTo(x + 9, b - 11); c.stroke();
+    fill(COL.scarf, () => c.arc(x, b - 5, 2, 0, TAU));
+  } else if (id === 'arid1') {
+    fill(COL.leaf, () => { rr(x - 3.5, b - 20, 7, 20, 3.5); rr(x - 9, b - 14, 4, 8, 2); rr(x + 5, b - 16, 4, 8, 2); });
+  } else if (id === 'arid2') {
+    fill(COL.serious, () => c.arc(x, b - 8, 8, 0, TAU));
+    fill(COL.wood, () => rr(x - 2.5, b - 19, 5, 4, 1));
+  } else if (id === 'nowork') {
+    fill(COL['mist-dim'], () => rr(x - 12, b - 5, 24, 5, 2));
+    c.fillStyle = COL.mist; c.font = '9px Jua, sans-serif'; c.textAlign = 'center'; c.fillText('6:00', x, b - 8);
+  } else if (id === 'noalarm') {
+    fill(COL.scarf, () => { c.arc(x, b - 8, 8, 0, TAU); c.moveTo(x - 3, b - 16); c.arc(x - 6, b - 16, 3, 0, TAU); c.moveTo(x + 9, b - 16); c.arc(x + 6, b - 16, 3, 0, TAU); });
+    fill(COL.mist, () => c.arc(x, b - 8, 5.5, 0, TAU));
+    c.strokeStyle = COL.ink; c.lineWidth = 1.3; c.beginPath(); c.moveTo(x - 3, b - 12); c.lineTo(x, b - 8); c.lineTo(x - 2, b - 5); c.lineTo(x + 2, b - 3); c.stroke();
+  } else if (id === 'slow') {
+    fill(COL.blush, () => rr(x - 10, b - 4, 20, 4, 2));
+    fill(COL.wood, () => c.arc(x + 2, b - 9, 6.5, 0, TAU));
+    c.strokeStyle = COL['fur-dark']; c.lineWidth = 1.4; c.beginPath(); c.arc(x + 2, b - 9, 3, 0, Math.PI * 1.6); c.stroke();
+    c.strokeStyle = COL.blush; c.beginPath(); c.moveTo(x - 8, b - 4); c.lineTo(x - 10, b - 10 + Math.sin(t / 300)); c.stroke();
+  }
+}
+
+function routeAt(p, u) {
+  const [x1, y1] = proj(...p.a), [x2, y2] = proj(...p.b);
+  const lift = Math.hypot(x2 - x1, y2 - y1) * (p.type === 'air' ? 0.22 : 0.08);
+  const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2 - lift;
+  const v = 1 - u;
+  return [v * v * x1 + 2 * v * u * cx + u * u * x2, v * v * y1 + 2 * v * u * cy + u * u * y2, [x1, y1, cx, cy, x2, y2]];
+}
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function draw(now) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  // graticule
+  ctx.strokeStyle = COL.line; ctx.globalAlpha = 0.3; ctx.lineWidth = 1; ctx.beginPath();
+  for (let lon = -150; lon <= 150; lon += 30) { const [x, y0] = proj(lon, LAT_TOP), [, y1] = proj(lon, LAT_BOT); ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+  for (let lat = 60; lat >= -30; lat -= 30) { const [x0, y] = proj(-180, lat), [x1] = proj(180, lat); ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  // dots
+  const fv = [], cv = [];
+  G.regions.forEach((g, i) => { fv[i] = visFrac(g.H, REGIONS[i].pop); cv[i] = visFrac(g.C, REGIONS[i].pop); });
+  const rad = Math.max(1, view.s * STEP * 0.36);
+  const hl = G.phase === 'pick' && G.pick ? G.pick.r : G.sel;
+  const paths = { land: new Path2D(), sel: new Path2D(), happy: new Path2D(), chill: new Path2D() };
+  for (const d of dots) {
+    const [x, y] = proj(d.lon, d.lat);
+    if (x < -5 || x > cw + 5) continue;
+    const p = d.t < cv[d.r] ? paths.chill : d.t < fv[d.r] ? paths.happy : d.r === hl ? paths.sel : paths.land;
+    p.moveTo(x + rad, y); p.arc(x, y, rad, 0, TAU);
+  }
+  ctx.fillStyle = COL.land; ctx.fill(paths.land);
+  ctx.fillStyle = COL['land-sel']; ctx.fill(paths.sel);
+  ctx.fillStyle = COL.yuzu; ctx.fill(paths.happy);
+  ctx.fillStyle = COL.blush; ctx.fill(paths.chill);
+
+  // airports and ports
+  const mk = Math.max(2.5, view.s * 1.1);
+  REGIONS.forEach((R, i) => {
+    const g = G.regions[i];
+    for (const [pos, open] of [[R.air, g.airOpen], [R.port, g.portOpen]]) {
+      const [x, y] = proj(...pos);
+      ctx.lineWidth = 1.5;
+      if (open) {
+        ctx.strokeStyle = COL.mist; ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.arc(x, y, mk, 0, TAU); ctx.stroke();
+      } else {
+        ctx.strokeStyle = COL.serious; ctx.globalAlpha = 0.95;
+        ctx.beginPath(); ctx.moveTo(x - mk, y - mk); ctx.lineTo(x + mk, y + mk); ctx.moveTo(x + mk, y - mk); ctx.lineTo(x - mk, y + mk); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  // routes
+  for (const p of G.planes) {
+    const u = Math.min(1, p.t / p.dur);
+    const [x, y] = routeAt(p, u);
+    if (p.carry) {
+      // short glowing trail behind the carrier
+      ctx.strokeStyle = COL.yuzu; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (let n = 0; n < 6; n++) {
+        const u0 = Math.max(0, u - (n + 1) * 0.025), u1 = Math.max(0, u - n * 0.025);
+        if (u1 <= 0) break;
+        const [ax, ay] = routeAt(p, u0), [bx, by] = routeAt(p, u1);
+        ctx.globalAlpha = 0.5 * (1 - n / 6);
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    const [x2, y2] = routeAt(p, Math.min(1, u + 0.01));
+    const ang = Math.atan2(y2 - y, x2 - x);
+    const dir = x2 < x ? -1 : 1;
+    const cs = Math.min(15, Math.max(coarse ? 10 : 9, view.s * 2.6));   // capybara size, grows with zoom
+    const bob = reduced ? 0 : Math.sin(now / 220 + p.b[0] + p.a[1]) * cs * 0.08;
+    if (p.type === 'air') {
+      // plane underneath, capybara sitting on top
+      const k = cs / 6;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.scale(k, k);
+      ctx.fillStyle = p.carry ? COL.yuzu : COL.mist;
+      ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, -4.5); ctx.lineTo(-2, 0); ctx.lineTo(-4, 4.5); ctx.closePath(); ctx.stroke(); ctx.fill();
+      ctx.restore();
+      capyRider(x, y - cs * 0.55 + bob, cs, dir, p.carry);
+    } else {
+      // an onsen tub with a capybara soaking in it
+      const w = cs * 1.15, yy = y + bob;
+      capyRider(x, yy - cs * 0.45, cs, dir, p.carry);
+      ctx.fillStyle = COL.wood; ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - w, yy - cs * 0.3); ctx.lineTo(x + w, yy - cs * 0.3); ctx.lineTo(x + w * 0.75, yy + cs * 0.45); ctx.lineTo(x - w * 0.75, yy + cs * 0.45); ctx.closePath();
+      ctx.stroke(); ctx.fill();
+      ctx.fillStyle = COL['fur-dark']; ctx.fillRect(x - w * 0.9, yy - cs * 0.05, w * 1.8, Math.max(1, cs * 0.1));
+      if (p.carry) {
+        ctx.strokeStyle = COL.mist; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.moveTo(x - dir * w * 0.6, yy - cs * 0.9); ctx.quadraticCurveTo(x - dir * w, yy - cs * 1.3, x - dir * w * 0.6, yy - cs * 1.7); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // labels
+  const fs = cw < 560 ? 11 : 13;
+  ctx.font = `${fs}px Jua, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  REGIONS.forEach((R, i) => {
+    const g = G.regions[i];
+    const [x, y] = proj(...R.center);
+    if (x < -60 || x > cw + 60) return;
+    const label = g.H >= 1 ? `${R.name} ${pct(g.H / R.pop)}` : R.name;
+    ctx.lineWidth = 3; ctx.strokeStyle = COL.ink; ctx.globalAlpha = 0.85; ctx.strokeText(label, x, y);
+    ctx.globalAlpha = 1; ctx.fillStyle = g.H >= 1 ? COL.mist : COL['mist-dim']; ctx.fillText(label, x, y);
+    if (g.H >= 1) capyFace(x - ctx.measureText(label).width / 2 - fs * 0.9, y, fs * 0.62);
+  });
+
+  // bubbles
+  for (const b of G.bubbles) {
+    const [x, y] = proj(b.lon, b.lat);
+    const grow = Math.min(1, b.age / 0.3), fade = Math.min(1, (b.life - b.age) / 1.5);
+    const bob = reduced ? 0 : Math.sin(now / 300 + b.lon) * 2;
+    ctx.globalAlpha = Math.max(0, fade);
+    yuzuIcon(x, y - 10 + bob, (coarse ? 13 : 10) * (0.5 + 0.5 * grow), b.kind);
+    ctx.globalAlpha = 1;
+  }
+  // floating +N
+  ctx.font = '16px Jua, sans-serif';
+  for (const f of G.floats) {
+    const [x, y] = proj(f.lon, f.lat);
+    ctx.globalAlpha = Math.max(0, 1 - f.age / 1.2);
+    ctx.lineWidth = 3; ctx.strokeStyle = COL.ink; ctx.strokeText(f.text, x, y - 16 - f.age * 22);
+    ctx.fillStyle = COL.yuzu; ctx.fillText(f.text, x, y - 16 - f.age * 22);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---------- input ----------
+const pointers = new Map();
+let down = null, pinch = null;
+const localXY = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+function pinchInfo() {
+  const [a, b] = [...pointers.values()];
+  return { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 };
+}
+canvas.addEventListener('pointerdown', e => {
+  const [x, y] = localXY(e);
+  pointers.set(e.pointerId, [x, y]);
+  canvas.setPointerCapture(e.pointerId);
+  if (pointers.size === 1) down = { x, y, panX: view.panX, panY: view.panY, moved: false };
+  if (pointers.size === 2) {
+    const p = pinchInfo();
+    pinch = { d0: p.d, z0: view.z, world: unproj(p.mx, p.my) };
+    if (down) down.moved = true;
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  const [x, y] = localXY(e);
+  if (!pointers.has(e.pointerId)) {
+    canvas.style.cursor = bubbleAt(x, y) >= 0 || regionAt(x, y) >= 0 ? 'pointer' : 'grab';
+    return;
+  }
+  pointers.set(e.pointerId, [x, y]);
+  if (pinch && pointers.size >= 2) {
+    const p = pinchInfo();
+    zoomTo(pinch.z0 * p.d / pinch.d0, pinch.world[0], pinch.world[1], p.mx, p.my);
+    return;
+  }
+  if (!down) return;
+  const dx = x - down.x, dy = y - down.y;
+  if (down.moved || Math.hypot(dx, dy) > 8) {
+    down.moved = true;
+    view.panX = down.panX + dx; view.panY = down.panY + dy; clampPan();
+  }
+});
+function endPointer(e, tap) {
+  if (!pointers.has(e.pointerId)) return;
+  const [x, y] = localXY(e);
+  pointers.delete(e.pointerId);
+  if (pointers.size === 0) {
+    if (tap && down && !down.moved) handleTap(x, y);
+    down = null; pinch = null;
+  } else if (pointers.size === 1) {
+    // one finger lifted mid-pinch: keep panning with the other, never treat it as a tap
+    const [px, py] = [...pointers.values()][0];
+    pinch = null;
+    down = { x: px, y: py, panX: view.panX, panY: view.panY, moved: true };
+  }
+}
+canvas.addEventListener('pointerup', e => endPointer(e, true));
+canvas.addEventListener('pointercancel', e => endPointer(e, false));
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const [x, y] = localXY(e);
+  zoomBy(Math.exp(-e.deltaY * 0.0015), x, y);
+}, { passive: false });
+$('#zoomIn').addEventListener('click', () => zoomBy(1.5));
+$('#zoomOut').addEventListener('click', () => zoomBy(1 / 1.5));
+$('#zoomReset').addEventListener('click', () => { view.z = 1; view.panX = 0; view.panY = 0; layout(); });
+const coarse = matchMedia('(pointer: coarse)').matches;
+
+function bubbleAt(x, y) {
+  for (let n = G.bubbles.length - 1; n >= 0; n--) {
+    const [bx, by] = proj(G.bubbles[n].lon, G.bubbles[n].lat);
+    if (Math.hypot(bx - x, by - 10 - y) < (coarse ? 24 : 18)) return n;
+  }
+  return -1;
+}
+function regionAt(x, y) {
+  let best = -1, bd = (Math.max(1, view.s * STEP * 0.36) * 2.5 + 5) ** 2;
+  for (const d of dots) {
+    const [dx, dy] = proj(d.lon, d.lat);
+    const q = (dx - x) ** 2 + (dy - y) ** 2;
+    if (q < bd) { bd = q; best = d.r; }
+  }
+  return best;
+}
+function handleTap(x, y) {
+  if (G.phase === 'play') {
+    const b = bubbleAt(x, y);
+    if (b >= 0) { const bb = G.bubbles.splice(b, 1)[0]; addYuzu(bb.val, bb.lon, bb.lat); return; }
+  }
+  const r = regionAt(x, y);
+  if (G.phase === 'pick') {
+    if (r < 0) return;
+    const [lon, lat] = unproj(x, y);
+    G.pick = { r, lon, lat };
+    $('#pickText').textContent = `${REGIONS[r].name}에서 시작할까요?`;
+    $('#pickGo').hidden = false;
+    return;
+  }
+  G.sel = r;
+  renderCard();
+}
+
+// ---------- UI ----------
+function fmt(n) {
+  n = Math.floor(n);
+  if (n >= 1e8) return (n / 1e8).toFixed(n >= 1e9 ? 0 : 1) + '억';
+  if (n >= 1e4) return (n / 1e4).toFixed(n >= 1e5 ? 0 : 1) + '만';
+  return n.toLocaleString('ko-KR');
+}
+function pct(f) {
+  if (f <= 0) return '0%';
+  if (f < 0.001) return '<0.1%';
+  if (f >= 1) return '100%';
+  return (f < 0.1 ? (f * 100).toFixed(1) : Math.min(99, Math.floor(f * 100))) + '%';
+}
+function dateStr() {
+  const d = new Date(2026, 9, 2 + G.day);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+}
+function news(text) {
+  const el = $('#tickerText');
+  const b = document.createElement('b'); b.textContent = dateStr();
+  el.replaceChildren(b, document.createTextNode(text));
+  el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
+}
+function cheapestOpen() {
+  return TRAITS.filter(t => traitState(t) === 'open').reduce((m, t) => Math.min(m, t.cost), Infinity);
+}
+function updateHUD() {
+  const wH = worldHappy(), wC = worldChill();
+  $('#yuzuCount').textContent = G.yuzu;
+  $('#dateLabel').textContent = dateStr();
+  $('#virusName').textContent = G.name;
+  $('#worldPct').textContent = pct(wH / TOTAL);
+  $('#barChill').style.width = (wC / TOTAL * 100) + '%';
+  $('#barHappy').style.width = ((wH - wC) / TOTAL * 100) + '%';
+  $('#lgHappy').textContent = `행복 ${fmt(wH)}명`;
+  $('#lgChill').textContent = `느긋 ${fmt(wC)}명`;
+  $('#lgNormal').textContent = `바쁨 ${fmt(TOTAL - wH)}명`;
+  if (G.noticed) {
+    $('#cureLabel').textContent = '진지함 백신 연구';
+    $('#curePct').textContent = (G.cure * 100).toFixed(1) + '%';
+    const closed = G.regions.filter(g => !g.airOpen).length;
+    $('#cureNote').textContent = closed ? `공항 ${closed}곳 폐쇄` : '세계근엄기구가 조사 중이에요';
+  } else {
+    $('#cureLabel').textContent = '진지함 백신';
+    $('#curePct').textContent = '—';
+    $('#cureNote').textContent = '세계근엄기구는 아직 아무것도 몰라요';
+  }
+  $('#barCure').style.width = (G.cure * 100) + '%';
+  $('#evolveSub').textContent = `유자 ${G.yuzu}개`;
+  $('#evolveBtn').classList.toggle('ready', G.phase === 'play' && G.yuzu >= cheapestOpen());
+  document.querySelectorAll('.speed button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.speed === G.speed)));
+  if (G.sel >= 0) renderCard();
+}
+function renderCard() {
+  const card = $('#rcard');
+  if (G.sel < 0) { card.hidden = true; return; }
+  const R = REGIONS[G.sel], g = G.regions[G.sel];
+  card.hidden = false;
+  $('#rName').textContent = R.name;
+  $('#rTags').replaceChildren(...R.tags.map(t => {
+    const s = document.createElement('span'); s.className = 'chip' + (t === 'onsen' || t === 'home' ? ' warm' : ''); s.textContent = TAG_LABEL[t]; return s;
+  }));
+  $('#rPop').textContent = fmt(R.pop) + '명';
+  $('#rHappy').textContent = g.H >= 1 ? `${fmt(g.H)}명 · ${pct(g.H / R.pop)}` : '아직 없음';
+  $('#rChill').textContent = g.C >= 1 ? `${fmt(g.C)}명 · ${pct(g.C / R.pop)}` : '아직 없음';
+  const st = (el, open) => { el.textContent = open ? '열림' : '폐쇄'; el.className = open ? '' : 'closed'; };
+  st($('#rAir'), g.airOpen); st($('#rPort'), g.portOpen);
+}
+$('#rClose').addEventListener('click', () => { G.sel = -1; renderCard(); });
+
+function setSpeed(n) {
+  if (G.phase !== 'play') return;
+  G.speed = n; updateHUD();
+}
+document.querySelectorAll('.speed button').forEach(b => b.addEventListener('click', () => setSpeed(+b.dataset.speed)));
+
+// start screen
+let chosenDiff = 'normal';
+document.querySelectorAll('#diffSeg button').forEach(b => b.addEventListener('click', () => {
+  chosenDiff = b.dataset.diff;
+  document.querySelectorAll('#diffSeg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+$('#startBtn').addEventListener('click', () => {
+  G.name = $('#nameInput').value.trim() || '행복바이러스';
+  G.diff = chosenDiff;
+  G.yuzu = DIFF[chosenDiff].yuzu;
+  G.phase = 'pick';
+  news(coarse ? '지도를 끌어서 옮기고, 두 손가락으로 확대할 수 있어요' : '지도를 끌어서 옮기고, 휠로 확대할 수 있어요');
+  showPhase();
+  updateHUD();
+});
+$('#pickGo').addEventListener('click', () => {
+  const { r, lon, lat } = G.pick;
+  G.phase = 'play';
+  seedRegion(r, lon, lat, `${REGIONS[r].name}: 카피바라 한 마리가 누군가의 어깨에 기댔어요. 모든 것은 거기서 시작됐어요`);
+  G.sel = r; G.pick = null; G.speed = 1;
+  showPhase(); updateHUD();
+  setTimeout(() => { if (G.phase === 'play' && G.day < 6) news('노란 유자가 보이면 눌러서 모으세요. 진화하기에서 특성을 살 수 있어요'); }, 4500);
+});
+
+// evolve
+let curTab = 'spread', curTrait = null;
+function traitState(t) {
+  if (G.owned.includes(t.id)) return 'owned';
+  return t.req.every(r => G.owned.includes(r)) ? 'open' : 'locked';
+}
+function openEvolve() {
+  if (G.phase !== 'play') return;
+  G.prevSpeed = G.speed || G.prevSpeed || 1;
+  G.speed = 0; updateHUD();
+  $('#evoScreen').hidden = false;
+  if (!curTrait) curTrait = TRAITS.find(t => t.tab === curTab && traitState(t) === 'open') || TRAITS[0];
+  renderEvolve();
+  $('#evoClose').focus();
+}
+function closeEvolve() {
+  $('#evoScreen').hidden = true;
+  if (G.phase === 'play') { G.speed = G.prevSpeed || 1; updateHUD(); }
+}
+function fxChips(t) {
+  if (t.fx.cure) return ['백신 연구 6%p 후퇴', '연구 속도 15% 감소'];
+  const out = Object.entries(t.fx).map(([k, v]) => `${FX_LABEL[k]} +${v}`);
+  if (t.id === 'ani2') out.push('철새 노선 개방');
+  return out;
+}
+function renderEvolve() {
+  $('#evoYuzu').textContent = G.yuzu;
+  for (const k of ['inf', 'sev', 'chl']) {
+    const key = 'm' + k[0].toUpperCase() + k.slice(1);
+    $('#' + key).textContent = S[k];
+    $('#' + key + 'Bar').style.width = Math.min(100, S[k] / METER_MAX[k] * 100) + '%';
+  }
+  $('#tabs').replaceChildren(...TABS.map(tab => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.role = 'tab'; b.textContent = tab.name;
+    b.setAttribute('aria-selected', String(tab.id === curTab));
+    b.addEventListener('click', () => { curTab = tab.id; curTrait = TRAITS.find(t => t.tab === curTab && traitState(t) === 'open') || TRAITS.find(t => t.tab === curTab); renderEvolve(); });
+    return b;
+  }));
+  const lines = [];
+  for (const t of TRAITS.filter(t => t.tab === curTab)) {
+    let ln = lines.find(l => l.name === t.line);
+    if (!ln) lines.push(ln = { name: t.line, items: [] });
+    ln.items.push(t);
+  }
+  $('#lines').replaceChildren(...lines.map(ln => {
+    const row = document.createElement('div'); row.className = 'line';
+    const lab = document.createElement('span'); lab.textContent = ln.name;
+    const chain = document.createElement('div'); chain.className = 'chain';
+    ln.items.forEach((t, n) => {
+      if (n) { const a = document.createElement('span'); a.className = 'arrow'; a.textContent = '→'; a.setAttribute('aria-hidden', 'true'); chain.append(a); }
+      const st = traitState(t);
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'trait' + (st === 'open' && G.yuzu >= t.cost ? ' afford' : '');
+      b.dataset.state = st;
+      if (curTrait === t) b.setAttribute('aria-current', 'true');
+      const nm = document.createElement('b'); nm.textContent = t.name;
+      const sm = document.createElement('small'); sm.textContent = st === 'owned' ? '진화 완료' : st === 'locked' ? `잠김 · 유자 ${t.cost}` : `유자 ${t.cost}`;
+      b.append(nm, sm);
+      b.addEventListener('click', () => { curTrait = t; renderEvolve(); });
+      chain.append(b);
+    });
+    row.append(lab, chain);
+    return row;
+  }));
+  const t = curTrait, st = traitState(t);
+  const info = document.createElement('div');
+  const h = document.createElement('h3'); h.textContent = t.name;
+  const p = document.createElement('p'); p.textContent = t.desc;
+  const chips = document.createElement('div'); chips.className = 'chips';
+  for (const c of fxChips(t)) { const s = document.createElement('span'); s.className = 'chip warm'; s.textContent = c; chips.append(s); }
+  if (st !== 'owned') {
+    const s = document.createElement('span'); s.className = 'chip';
+    s.textContent = '왼쪽 카피바라에 반투명하게 미리 보여요';
+    chips.append(s);
+  }
+  if (st === 'locked') {
+    const s = document.createElement('span'); s.className = 'chip';
+    s.textContent = '먼저 필요: ' + t.req.filter(r => !G.owned.includes(r)).map(r => TRAIT[r].name).join(', ');
+    chips.append(s);
+  }
+  info.append(h, p, chips);
+  const buy = document.createElement('button');
+  buy.type = 'button'; buy.className = 'primary small';
+  buy.textContent = st === 'owned' ? '이미 진화했어요' : st === 'locked' ? '아직 잠겨 있어요' : G.yuzu < t.cost ? `유자 ${t.cost - G.yuzu}개 더 필요해요` : `유자 ${t.cost}개로 진화`;
+  buy.disabled = st !== 'open' || G.yuzu < t.cost;
+  buy.addEventListener('click', () => buyTrait(t));
+  $('#detailInfo').replaceChildren(info);
+  $('#detailBuy').replaceChildren(buy);
+}
+function buyTrait(t) {
+  if (traitState(t) !== 'open' || G.yuzu < t.cost) return;
+  G.yuzu -= t.cost;
+  G.owned.push(t.id);
+  computeStats();
+  if (t.fx.cure) { G.cure = Math.max(0, G.cure - 0.06); G.cureMult *= 0.85; }
+  news(`${G.name}이(가) '${t.name}'(으)로 진화했어요`);
+  hopAt = performance.now();
+  updateHUD(); renderEvolve();
+}
+$('#evolveBtn').addEventListener('click', openEvolve);
+$('#evoClose').addEventListener('click', closeEvolve);
+$('#evoScreen').addEventListener('click', e => { if (e.target.id === 'evoScreen') closeEvolve(); });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape' && !$('#evoScreen').hidden) return closeEvolve();
+  if (!$('#evoScreen').hidden) return;
+  if (e.key === ' ') { e.preventDefault(); setSpeed(G.speed ? 0 : (G.prevSpeed || 1)); if (G.speed) G.prevSpeed = G.speed; }
+  if (e.key === '1' || e.key === '2' || e.key === '3') setSpeed(+e.key);
+  if (e.key === 'e' || e.key === 'E') openEvolve();
+});
+
+// ending
+function showEnd() {
+  const win = G.result === 'win';
+  $('#endTitle').innerHTML = '';
+  $('#endTitle').append(win ? '온 세상이 ' : '세상이 다시 ', Object.assign(document.createElement('em'), { textContent: win ? '느긋해졌어요' : '바빠졌어요' }));
+  $('#endText').textContent = win
+    ? `${G.name}이(가) 온 인류에게 퍼졌어요. 오늘은 모두 온천 가는 날이에요. 카피바라는 여전히 아무 일 없다는 표정이에요.`
+    : '진지함 백신이 완성됐어요. 사람들은 다시 서둘러 출근합니다. 카피바라는 신경 쓰지 않고 귤을 먹고 있어요.';
+  const stats = [
+    [`${G.day}일`, '걸린 시간'],
+    [pct(worldHappy() / TOTAL), '세계 행복도'],
+    [(G.cure * 100).toFixed(1) + '%', '진지함 백신'],
+    [`${G.owned.length}개`, '진화한 특성'],
+    [DIFF[G.diff].label, '난이도'],
+  ];
+  $('#endStats').replaceChildren(...stats.map(([v, l]) => {
+    const d = document.createElement('div');
+    const b = document.createElement('b'); b.textContent = v;
+    const s = document.createElement('small'); s.textContent = l;
+    d.append(b, s); return d;
+  }));
+  $('#evoScreen').hidden = true;
+  $('#endScreen').hidden = false;
+}
+$('#againBtn').addEventListener('click', () => {
+  for (const d of dots) d.t = 2;
+  G = newGame(); computeStats(); curTrait = null; curTab = 'spread';
+  showPhase(); updateHUD();
+  news('카피바라가 온천에서 기지개를 켜고 있어요');
+});
+
+function showPhase() {
+  $('#startScreen').hidden = G.phase !== 'title';
+  $('#endScreen').hidden = G.phase !== 'over';
+  $('#pickBanner').hidden = G.phase !== 'pick';
+  if (G.phase === 'pick') {
+    $('#pickText').textContent = G.pick ? `${REGIONS[G.pick.r].name}에서 시작할까요?` : '카피바라가 처음 나타날 지역을 지도에서 고르세요';
+    $('#pickGo').hidden = !G.pick;
+  }
+  if (G.phase === 'title') $('#nameInput').value = G.name;
+  renderCard();
+}
+
+// ---------- loop ----------
+let last = performance.now(), acc = 0;
+const DAYS_PER_SEC = [0, 2, 4, 8];
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (G.phase === 'play' && G.speed > 0) {
+    const dd = dt * DAYS_PER_SEC[G.speed];
+    acc += dd;
+    while (acc >= 1 && G.phase === 'play') { acc -= 1; tickDay(); }
+    movePlanes(dd);
+    for (const b of G.bubbles) b.age += dt;
+    G.bubbles = G.bubbles.filter(b => b.age < b.life);
+  }
+  for (const f of G.floats) f.age += dt;
+  G.floats = G.floats.filter(f => f.age < 1.2);
+  draw(now);
+  if (!$('#evoScreen').hidden && curTrait) drawPortrait($('#evoCapy'), G.owned, curTrait.id, now);
+  if (!$('#endScreen').hidden) drawPortrait($('#endCapy'), G.owned, null, now);
+  requestAnimationFrame(frame);
+}
+
+function boot(data) {
+  G = data && data.G ? data.G : newGame();
+  computeStats();
+  G.regions.forEach((g, i) => { if (g.seed) orderRegion(i); });
+  resize();
+  new ResizeObserver(resize).observe(wrap);
+  showPhase(); updateHUD();
+  if (G.phase === 'over') showEnd();
+  requestAnimationFrame(frame);
+}
+window.claude?.hot?.snapshot?.(() => ({ G }));
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>

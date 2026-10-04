@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="브라우저에서 바로 하는 작은 게임 모음">
+<title>작은 오락실</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: a single shelf of game cabinets — wordmark header, then a card grid; each card is one game. */
+:root {
+  --bg: #edf2ef;
+  --surface: #ffffff;
+  --line: #d9e2dd;
+  --ink: #23302f;
+  --ink-soft: #65706d;
+  --coin: #f2a516;
+  --coin-ink: #3b2a05;
+  --f-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #171c1c; --surface: #212828; --line: #313b3a; --ink: #eef1ea; --ink-soft: #a3aea9; --coin: #f5b53a; --coin-ink: #2c1f03; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #171c1c; --surface: #212828; --line: #313b3a; --ink: #eef1ea; --ink-soft: #a3aea9; --coin: #f5b53a; --coin-ink: #2c1f03; color-scheme: dark; }
+html { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.6;
+  padding: max(28px, env(safe-area-inset-top, 0px)) 16px max(40px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 920px; margin: 0 auto; }
+header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; margin-bottom: 28px; }
+h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(36px, 8vw, 54px); line-height: 1; letter-spacing: -.01em; }
+h1 .coin { display: inline-block; width: .62em; height: .62em; border-radius: 50%; background: var(--coin); margin-left: .12em; vertical-align: .08em; box-shadow: inset 0 0 0 .07em rgba(0,0,0,.12); }
+header p { margin: 0; color: var(--ink-soft); max-width: 28em; }
+.games { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 20px; }
+.game {
+  display: grid; grid-template-rows: auto 1fr; text-decoration: none; color: inherit;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 22px; overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.game:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(0,0,0,.08); }
+.game:focus-visible { outline: 3px solid var(--coin); outline-offset: 3px; }
+.game img { display: block; width: 100%; aspect-ratio: 720 / 456; object-fit: cover; background: var(--line); }
+.body { padding: 16px 18px 18px; display: grid; gap: 6px; align-content: start; }
+.meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-size: 12px; letter-spacing: .03em; padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-soft); }
+.game h2 { margin: 2px 0 0; font-family: var(--f-display); font-weight: 400; font-size: 24px; line-height: 1.25; }
+.game p { margin: 0; color: var(--ink-soft); font-size: 15px; }
+.play { margin-top: 8px; justify-self: start; font-family: var(--f-display); font-size: 16px; padding: 6px 16px; border-radius: 999px; background: var(--coin); color: var(--coin-ink); }
+footer { margin-top: 36px; color: var(--ink-soft); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .game { transition: none; } .game:hover { transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>작은 오락실<span class="coin" aria-hidden="true"></span></h1>
+    <p>설치 없이 브라우저에서 바로 하는 작은 게임들이에요. 휴대폰에서도 할 수 있어요.</p>
+  </header>
+
+  <main class="games">
+    <a class="game" href="onsen/">
+      <img src="assets/onsen.jpg" alt="계단식 섬 위로 온천물이 흐르고 카피바라들이 욕조에 앉아 있는 3D 디오라마">
+      <div class="body">
+        <div class="meta"><span class="chip">3D 퍼즐</span><span class="chip">힐링</span><span class="chip">10 스테이지</span></div>
+        <h2>카피바라 온천 마을</h2>
+        <p>물길을 돌려 원천의 온천물을 카피바라 욕조까지 이어 주세요. 시간 제한도 실패도 없어요.</p>
+        <span class="play">플레이</span>
+      </div>
+    </a>
+    <a class="game" href="virus/">
+      <img src="assets/virus.jpg" alt="점으로 그린 세계 지도 위로 카피바라를 태운 비행기와 배가 오가는 화면">
+      <div class="body">
+        <div class="meta"><span class="chip">전략</span><span class="chip">시뮬레이션</span></div>
+        <h2>카피바라 행복바이러스</h2>
+        <p>세계근엄기구가 진지함 백신을 완성하기 전에 온 인류를 느긋하게 만드세요.</p>
+        <span class="play">플레이</span>
+      </div>
+    </a>
+  </main>
+
+  <footer>기록은 각자의 브라우저에만 저장돼요.</footer>
+</div>
+</body>
+</html>
