@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="탭 한 번으로 두 갈래 길을 오가며 장애물을 피하고, 로켓으로 부수며 달리는 카피바라 러너">
+<style>[hidden]{display:none!important}</style>
+<title>카피바라 대시</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: one full-screen canvas runner; a thin HUD on top, overlay cards for start and results.
+   One deliberate look: a bright summer road at speed. */
+:root {
+  --ink: #23302c;
+  --panel: #fffdf8;
+  --panel-line: #e7dcc9;
+  --yuzu: #ffa236;
+  --yuzu-deep: #dd7a0e;
+  --boost: #ff5a3c;
+  --muted: #6c7a74;
+  --f-display: "Jua", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-body: "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color-scheme: light;
+}
+html { box-sizing: border-box; height: 100%; }
+*, *::before, *::after { box-sizing: inherit; }
+body { height: 100%; margin: 0; overflow: hidden; background: #7cc56f; color: var(--ink); font-family: var(--f-body); }
+#app { position: relative; height: 100%; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
+#game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible { outline: 3px solid var(--yuzu); outline-offset: 2px; }
+.hud { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: max(12px, env(safe-area-inset-top, 0px)) 14px 0; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.score { font-family: var(--f-display); font-size: 40px; line-height: 1; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.18), 0 0 18px rgba(0,0,0,.15); font-variant-numeric: tabular-nums; }
+.score small { display: block; font-size: 14px; margin-top: 4px; opacity: .9; }
+.pills { display: flex; gap: 8px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; background: rgba(255,253,248,.92); font-family: var(--f-display); font-size: 17px; font-variant-numeric: tabular-nums; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.pill svg { width: 18px; height: 18px; }
+.round { width: 42px; height: 42px; border-radius: 50%; border: 0; display: grid; place-items: center; background: rgba(255,253,248,.92); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.round svg { width: 20px; height: 20px; stroke: var(--ink); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.overlay { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); }
+.card { width: min(400px, 100%); background: var(--panel); border-radius: 26px; padding: 22px; text-align: center; box-shadow: 0 6px 0 var(--panel-line), 0 24px 60px rgba(0,0,0,.25); }
+h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(34px, 10vw, 46px); line-height: 1.05; }
+h1 em { font-style: normal; color: var(--boost); }
+.card p { margin: 10px auto 16px; color: var(--muted); max-width: 26em; text-wrap: balance; }
+.howto { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 18px; }
+.howto div { background: #f6f1e7; border-radius: 16px; padding: 10px 6px; font-size: 12px; line-height: 1.35; }
+.howto svg { display: block; width: 34px; height: 34px; margin: 0 auto 4px; }
+.primary { border: 0; border-radius: 18px; padding: 14px 26px; min-width: 180px; background: var(--boost); color: #fff; font-family: var(--f-display); font-size: 21px; box-shadow: 0 5px 0 #c8402a; }
+.primary:active { transform: translateY(3px); box-shadow: 0 2px 0 #c8402a; }
+.note { margin-top: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.result h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 30px; }
+.big { font-family: var(--f-display); font-size: 56px; line-height: 1.1; color: var(--boost); font-variant-numeric: tabular-nums; }
+.newbest { display: inline-block; padding: 2px 12px; border-radius: 999px; background: var(--yuzu); color: #fff; font-family: var(--f-display); font-size: 15px; animation: pulse .8s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.08); } }
+.stats { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 12px 0 18px; }
+.stats span { padding: 4px 12px; border-radius: 999px; background: #f3ede2; font-size: 14px; font-variant-numeric: tabular-nums; }
+.tapnote { margin-top: 10px; font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .newbest { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game" aria-label="카피바라가 두 갈래 길을 달려요. 화면을 탭하면 길을 바꿔요."></canvas>
+
+  <header class="hud" id="hud" hidden>
+    <div class="score"><span id="score">0</span><small id="best"></small></div>
+    <div class="pills">
+      <span class="pill"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="11.5" r="7.5" fill="#ffa236"/><ellipse cx="13" cy="4" rx="3.6" ry="1.8" transform="rotate(-28 13 4)" fill="#5fae6b"/></svg><span id="yuzuCount">0</span></span>
+      <button type="button" class="round" id="soundBtn" aria-label="소리 끄기"><svg viewBox="0 0 24 24" id="soundIcon"></svg></button>
+      <button type="button" class="round" id="pauseBtn" aria-label="일시정지"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button>
+    </div>
+  </header>
+
+  <section class="overlay" id="start">
+    <div class="card">
+      <h1>카피바라 <em>대시</em></h1>
+      <p>두 갈래 길을 달리며 장애물을 피해요. 로켓을 먹으면 모든 걸 부수며 질주해요!</p>
+      <div class="howto">
+        <div><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="9" fill="none" stroke="#23302c" stroke-width="2.4"/><circle cx="17" cy="17" r="3.5" fill="#ff5a3c"/></svg>탭하면<br>길 바꾸기</div>
+        <div><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M17 4 c6 6 6 16 0 22 c-6 -6 -6 -16 0 -22z" fill="#ff5a3c"/><path d="M13 26 l4 6 l4 -6" fill="#ffa236"/></svg>로켓으로<br>부수며 질주</div>
+        <div><svg viewBox="0 0 34 34" aria-hidden="true"><path d="M6 24 l10 -14 l2 6 l10 -4" stroke="#23302c" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>아슬아슬하게<br>피하면 보너스</div>
+      </div>
+      <button type="button" class="primary" id="goBtn">달리기</button>
+      <div class="note" id="startNote"></div>
+    </div>
+  </section>
+
+  <section class="overlay" id="paused" hidden>
+    <div class="card"><h1>잠깐 쉬어요</h1><p>준비되면 다시 달려요.</p><button type="button" class="primary" id="resumeBtn">계속 달리기</button></div>
+  </section>
+
+  <section class="overlay" id="result" hidden>
+    <div class="card result">
+      <h2 id="resultTitle">쿵!</h2>
+      <div class="big" id="resultScore">0</div>
+      <span class="newbest" id="newBest" hidden>최고 기록!</span>
+      <div class="stats" id="resultStats"></div>
+      <button type="button" class="primary" id="againBtn">다시 달리기</button>
+      <div class="tapnote">화면 아무 곳이나 눌러도 다시 달려요</div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ---------- save ----------
+const SAVE_KEY = 'capy-dash:v1';   // shared localStorage on starone99.github.io, so keys carry a game prefix
+function loadSave() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage unavailable */ }
+  if (!s || typeof s.best !== 'number') s = { best: 0, runs: 0, yuzu: 0, sound: true };
+  return s;
+}
+const save = loadSave();
+function writeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* storage unavailable */ } }
+
+// ---------- sound: synthesized sfx and a beat that speeds up with you ----------
+const Sound = {
+  ctx: null, master: null, music: null, noiseBuf: null, nextBeat: 0, step: 0, bpm: 120,
+  ensure() {
+    if (!save.sound) return null;
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.85; this.master.connect(this.ctx.destination);
+      this.music = this.ctx.createGain(); this.music.gain.value = 0.0; this.music.connect(this.master);
+      this.noiseBuf = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  },
+  tone(freq, dur, { type = 'sine', gain = 0.12, to = null, delay = 0, out = null } = {}) {
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(out || this.master); o.start(t); o.stop(t + dur + 0.05);
+  },
+  noise(dur, { freq = 1000, q = 1, gain = 0.1, delay = 0, type = 'bandpass', to = null, out = null, at = null } = {}) {
+    const ctx = this.ensure(); if (!ctx) return;
+    const t = at ?? ctx.currentTime + delay, src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+    if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(out || this.master); src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  },
+  whoosh() { this.noise(0.16, { freq: 900, q: 0.8, gain: 0.12, to: 3200 }); },
+  yuzu(combo) { const f = 880 * Math.pow(2, Math.min(combo, 14) / 12); this.tone(f, 0.12, { type: 'triangle', gain: 0.08 }); this.tone(f * 1.5, 0.1, { gain: 0.03, delay: 0.03 }); },
+  smash() { this.noise(0.35, { freq: 600, q: 0.6, gain: 0.3, type: 'lowpass', to: 200 }); this.tone(90, 0.25, { type: 'triangle', gain: 0.3, to: 45 }); this.noise(0.12, { freq: 4000, q: 1, gain: 0.08 }); },
+  hit() { this.noise(0.5, { freq: 500, q: 0.5, gain: 0.35, type: 'lowpass', to: 120 }); this.tone(140, 0.4, { type: 'sawtooth', gain: 0.12, to: 40 }); },
+  boost() { this.tone(160, 0.7, { type: 'sawtooth', gain: 0.1, to: 640 }); this.noise(0.9, { freq: 400, q: 0.7, gain: 0.14, to: 3000 }); },
+  item() { [784, 988, 1175].forEach((f, i) => this.tone(f, 0.14, { type: 'triangle', gain: 0.07, delay: i * 0.05 })); },
+  near() { this.noise(0.2, { freq: 2500, q: 2, gain: 0.08, to: 600 }); this.tone(1320, 0.1, { gain: 0.04 }); },
+  pop() { this.tone(600, 0.12, { gain: 0.08, to: 1200 }); this.noise(0.1, { freq: 3000, q: 1, gain: 0.05 }); },
+  // music: kick, hat and a little bass line; tempo follows the run speed
+  tickMusic(speedK, boosting) {
+    if (!this.ctx || !save.sound) return;
+    const ctx = this.ctx;
+    this.bpm = 116 + speedK * 44 + (boosting ? 20 : 0);
+    const spb = 60 / this.bpm / 2;   // eighth notes
+    if (this.nextBeat < ctx.currentTime) this.nextBeat = ctx.currentTime + 0.05;
+    const bass = [55, 55, 65.4, 55, 73.4, 65.4, 55, 82.4];
+    while (this.nextBeat < ctx.currentTime + 0.12) {
+      const t = this.nextBeat, s = this.step % 16;
+      if (s % 4 === 0) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12); g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16); o.connect(g); g.connect(this.music); o.start(t); o.stop(t + 0.2); }
+      this.noise(0.04, { freq: 8000, q: 1, gain: s % 2 ? 0.05 : 0.09, type: 'highpass', out: this.music, at: t });
+      if (s % 2 === 0) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = bass[(s / 2) % 8] * (boosting ? 2 : 1); g.gain.setValueAtTime(0.18, t); g.gain.exponentialRampToValueAtTime(0.0001, t + spb * 1.8); o.connect(g); g.connect(this.music); o.start(t); o.stop(t + spb * 2); }
+      if (boosting && s % 4 === 2) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.value = [523, 659, 784, 659][(this.step >> 2) % 4]; g.gain.setValueAtTime(0.04, t); g.gain.exponentialRampToValueAtTime(0.0001, t + spb); o.connect(g); g.connect(this.music); o.start(t); o.stop(t + spb); }
+      this.nextBeat += spb; this.step++;
+    }
+  },
+  musicOn(on) { if (!this.music) return; this.music.gain.setTargetAtTime(on ? 0.32 : 0, this.ctx.currentTime, 0.15); },
+  setOn(on) { save.sound = on; writeSave(); if (this.master) this.master.gain.value = on ? 0.85 : 0; if (on) this.ensure(); },
+};
+const buzz = ms => { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* not allowed here */ } };
+
+// ---------- canvas and projection ----------
+const cv = $('#game'), g = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+let horizon = 0, playerY = 0, roadHalf = 0, K = 320;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  horizon = H * 0.16; playerY = H * 0.8;
+  roadHalf = Math.min(W * 0.36, 230);
+}
+window.addEventListener('resize', resize); resize();
+// distance ahead (d, world units) -> screen y and scale; d = 0 is the capybara's line
+const scaleAt = d => K / (K + Math.max(-K * 0.6, d));
+const yAt = d => horizon + (playerY - horizon) * scaleAt(d);
+const laneX = (lane, d) => W / 2 + (lane === 0 ? -1 : 1) * roadHalf * 0.5 * scaleAt(d);
+
+// ---------- game state ----------
+const LANE_TIME = 0.12;
+let state = 'title', t = 0, dist = 0, speed = 0, score = 0, yuzu = 0, combo = 0, comboT = 0, smashCombo = 0, nearCount = 0, smashed = 0;
+let lane = 1, laneFrom = 1, laneT = 1, boostT = 0, magnetT = 0, shield = false, hitstop = 0, slowmo = 0, shake = 0, flash = 0, dead = false, deadT = 0;
+let objs = [], parts = [], texts = [], streaks = [], scenery = [], nextSpawn = 0, lastPatternLane = 0, speedLevel = 0, rocketIn = 0, itemIn = 0;
+const BASE_SPEED = 560, MAX_SPEED = 1450, BOOST_MUL = 2.3;
+
+function reset() {
+  t = 0; dist = 0; speed = BASE_SPEED; score = 0; yuzu = 0; combo = 0; comboT = 0; nearCount = 0; smashed = 0; smashCombo = 0;
+  lane = 1; laneFrom = 1; laneT = 1; boostT = 0; magnetT = 0; shield = false; hitstop = 0; slowmo = 0; shake = 0; flash = 0; dead = false; deadT = 0;
+  objs = []; parts = []; texts = []; nextSpawn = 900; speedLevel = 0; rocketIn = rand(9, 13); itemIn = rand(14, 20);
+  scenery = [];
+  for (let d = -200; d < 2400; d += rand(60, 120)) addScenery(d);
+}
+function addScenery(d) {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const kinds = ['tree', 'tree', 'bush', 'lantern', 'flower', 'reed'];
+  scenery.push({ d, side, off: rand(1.25, 2.4), kind: kinds[Math.floor(Math.random() * kinds.length)], hue: Math.random() });
+}
+// obstacle patterns, always leaving a way through at the current speed
+function spawnPattern() {
+  const sp = effectiveSpeed();
+  const tight = Math.max(0.42, 0.62 - speedLevel * 0.03);
+  const gap = sp * rand(tight, tight + 0.28);       // room to react between rows
+  const base = nextSpawn;
+  let used = 0;
+  const pick = () => (Math.random() < 0.55 ? 1 - lastPatternLane : lastPatternLane);
+  // while boosting: walls to smash and yuzu to sweep, only as far as the boost will carry you
+  if (boostT > 0 && base < boostT * sp - sp * 0.5) {
+    const kind = ['rock', 'log', 'rock', 'crab'][Math.floor(Math.random() * 4)];
+    for (const l of [0, 1]) objs.push(kind === 'crab' ? { kind, lane: l, d: base, dir: 0, x: l, wait: 99 } : { kind, lane: l, d: base });
+    for (let i = 1; i <= 3; i++) objs.push({ kind: 'yuzu', lane: i % 2, d: base + i * 45 });
+    nextSpawn = base + rand(150, 220);
+    return;
+  }
+  if (rocketIn <= 0 && boostT <= 0) {
+    const l = pick();
+    objs.push({ kind: 'rocket', lane: l, d: base });
+    for (let i = 1; i <= 3; i++) objs.push({ kind: 'yuzu', lane: l, d: base - i * 70 });
+    rocketIn = rand(18, 26);
+    nextSpawn = base + gap * 1.4;
+    return;
+  }
+  if (itemIn <= 0) {
+    const l = pick();
+    objs.push({ kind: Math.random() < 0.5 ? 'magnet' : 'bubble', lane: l, d: base });
+    itemIn = rand(13, 19);
+    nextSpawn = base + gap;
+    return;
+  }
+  const r = Math.random();
+  if (r < 0.45) {
+    // zigzag: alternate lanes with yuzu along the safe side
+    const n = 2 + Math.floor(Math.random() * (2 + Math.min(4, speedLevel)));
+    let l = pick();
+    for (let i = 0; i < n; i++) {
+      objs.push({ kind: Math.random() < 0.6 ? 'rock' : 'log', lane: l, d: base + i * gap });
+      objs.push({ kind: 'yuzu', lane: 1 - l, d: base + i * gap });
+      l = 1 - l;
+    }
+    lastPatternLane = 1 - l;
+    used = n * gap;
+  } else if (r < 0.6 && dist > 2500) {
+    // a crab scuttling across: dodge to the lane it is leaving
+    const l = pick();
+    objs.push({ kind: 'crab', lane: l, d: base, dir: l === 0 ? 1 : -1, x: l, wait: rand(0.2, 0.5) });
+    used = gap * 1.2;
+  } else if (r < 0.8) {
+    // a row of yuzu with a rock at the end
+    const l = pick();
+    for (let i = 0; i < 6; i++) objs.push({ kind: 'yuzu', lane: l, d: base + i * 60 });
+    objs.push({ kind: 'rock', lane: l, d: base + 6 * 60 + gap * 0.5 });
+    lastPatternLane = 1 - l;
+    used = 6 * 60 + gap;
+  } else {
+    // pair of obstacles in one lane
+    const l = pick();
+    objs.push({ kind: 'rock', lane: l, d: base });
+    objs.push({ kind: 'log', lane: l, d: base + 90 });
+    for (let i = 0; i < 4; i++) objs.push({ kind: 'yuzu', lane: 1 - l, d: base + i * 50 });
+    lastPatternLane = 1 - l;
+    used = 90 + gap;
+  }
+  nextSpawn = base + used + gap * rand(0.8, 1.3);
+}
+const effectiveSpeed = () => speed * (boostT > 0 ? BOOST_MUL : 1);
+const laneNow = () => (laneT > 0.5 ? lane : laneFrom);
+const laneVisual = () => { const k = clamp(laneT, 0, 1), e = 1 - (1 - k) ** 3; return laneFrom + (lane - laneFrom) * e; };
+
+// ---------- input: tap anywhere ----------
+function tap() {
+  Sound.ensure();
+  if (state === 'title') { start(); return; }
+  if (state === 'over') { if (deadT > 0.6) start(); return; }
+  if (state !== 'run' || dead) return;
+  laneFrom = laneNow(); lane = 1 - laneFrom; laneT = 0;
+  Sound.whoosh(); buzz(8);
+  // near miss: something in the lane we just left, right in front of us
+  const threat = objs.find(o => isHazard(o) && o.lane === laneFrom && o.d > 0 && o.d < effectiveSpeed() * 0.16);
+  if (threat && boostT <= 0) {
+    nearCount++; score += 15 * (1 + speedLevel);
+    float('아슬아슬! +' + 15 * (1 + speedLevel), laneX(laneFrom, 0), playerY - 60, '#fff');
+    slowmo = 0.18; Sound.near();
+  }
+  for (let i = 0; i < 6; i++) parts.push({ x: laneX(laneFrom, 0), y: playerY + 18, vx: rand(-60, 60) + (lane - laneFrom) * 120, vy: rand(-40, 10), life: 0.35, age: 0, r: rand(3, 6), c: 'rgba(255,255,255,0.8)' });
+}
+cv.addEventListener('pointerdown', e => { e.preventDefault(); tap(); });
+$('#result').addEventListener('pointerdown', e => { if (e.target.closest('button')) return; tap(); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); if (state === 'run') tap(); } });
+$('#goBtn').addEventListener('click', () => { Sound.ensure(); start(); });
+$('#againBtn').addEventListener('click', () => { Sound.ensure(); start(); });
+$('#pauseBtn').addEventListener('click', () => { if (state !== 'run') return; state = 'paused'; $('#paused').hidden = false; Sound.musicOn(false); });
+$('#resumeBtn').addEventListener('click', () => { state = 'run'; $('#paused').hidden = true; Sound.musicOn(true); last = performance.now(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'run') $('#pauseBtn').click(); });
+function renderSound() { $('#soundBtn').setAttribute('aria-label', save.sound ? '소리 끄기' : '소리 켜기'); $('#soundIcon').innerHTML = save.sound ? '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>' : '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>'; }
+$('#soundBtn').addEventListener('click', () => { Sound.setOn(!save.sound); renderSound(); if (state === 'run') Sound.musicOn(save.sound); });
+
+function start() {
+  reset(); state = 'run';
+  $('#start').hidden = true; $('#result').hidden = true; $('#hud').hidden = false;
+  Sound.musicOn(true);
+  float('탭해서 길 바꾸기!', W / 2, H * 0.45, '#fff', 1.6, 30);
+}
+function float(text, x, y, color, life = 0.9, size = 24) {
+  const busy = texts.filter(tx => tx.age < 0.5 && Math.abs(tx.y - y) < 40).length;
+  texts.push({ text, x: clamp(x, 90, W - 90), y: y - busy * 42, color, life, age: 0, size });
+}
+const isHazard = o => o.kind === 'rock' || o.kind === 'log' || o.kind === 'crab';
+
+// ---------- update ----------
+function update(dt) {
+  if (state !== 'run' && state !== 'over') return;
+  t += dt;
+  if (dead) { deadT += dt; }
+  const sp = dead ? effectiveSpeed() * Math.max(0, 1 - deadT * 2.5) : effectiveSpeed();
+  dist += sp * dt;
+  if (!dead) {
+    speed = Math.min(MAX_SPEED, speed + dt * (14 - Math.min(8, t * 0.05)));
+    const lvl = Math.floor((speed - BASE_SPEED) / 150);
+    if (lvl > speedLevel) { speedLevel = lvl; float('속도 UP!', W / 2, H * 0.32, '#fff', 1.1, 34); Sound.item(); }
+    score += sp * dt * 0.02 * (boostT > 0 ? 2 : 1);
+  }
+  laneT += dt / LANE_TIME;
+  if (boostT > 0) { boostT -= dt; if (boostT <= 0) { smashCombo = 0; float('부스트 끝', W / 2, H * 0.4, '#fff', 0.8); objs = objs.filter(o => !(isHazard(o) && o.d < effectiveSpeed() * 1.2)); nextSpawn = Math.max(nextSpawn, effectiveSpeed() * 1.2); } }
+  if (magnetT > 0) magnetT -= dt;
+  if (!dead) { rocketIn -= dt; itemIn -= dt; }
+  if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
+  // move world toward the player
+  for (const o of objs) {
+    o.pd = o.d;
+    o.d -= sp * dt;
+    if (o.kind === 'crab' && o.dir && o.d < sp * 0.9) { o.wait -= dt; if (o.wait <= 0) { o.x = clamp(o.x + o.dir * dt * 2.4, 0, 1); o.lane = o.x > 0.5 ? 1 : 0; } }
+    if (o.kind === 'yuzu' && magnetT > 0 && o.d < 500 && o.d > -20) { o.lane = laneNow(); o.pull = true; }
+  }
+  for (const s of scenery) s.d -= sp * dt;
+  scenery = scenery.filter(s => s.d > -K * 0.55);
+  while (scenery.length < 46) addScenery((scenery.length ? Math.max(...scenery.map(s => s.d)) : 0) + rand(50, 110));
+  nextSpawn -= sp * dt;
+  if (!dead) while (nextSpawn < 2600) spawnPattern();
+  // collisions on the capybara's line
+  const myLane = laneNow();
+  for (const o of objs) {
+    if (o.gone || dead) continue;
+    if (o.d > 30 || o.pd < -30) continue;
+    const sameLane = o.kind === 'crab' ? Math.abs(o.x - myLane) < 0.45 : o.lane === myLane;
+    if (!sameLane) continue;
+    if (o.kind === 'yuzu') { o.gone = true; collectYuzu(o); continue; }
+    if (o.kind === 'rocket') { o.gone = true; boostT = 5.5; Sound.boost(); flash = 0.6; shake = 10; float('로켓 질주!', W / 2, H * 0.36, '#fff', 1.2, 40); buzz(40); continue; }
+    if (o.kind === 'magnet') { o.gone = true; magnetT = 7; Sound.item(); float('유자 자석!', W / 2, H * 0.4, '#fff', 1, 30); continue; }
+    if (o.kind === 'bubble') { o.gone = true; shield = true; Sound.item(); float('거품 방패!', W / 2, H * 0.4, '#fff', 1, 30); continue; }
+    if (isHazard(o)) {
+      if (boostT > 0) { smash(o); continue; }
+      if (shield) { shield = false; o.gone = true; burst(o, 14, ['#bfe9ff', '#fff']); Sound.pop(); float('방패가 막았어요', W / 2, H * 0.42, '#fff', 0.9, 26); shake = 6; continue; }
+      die(o);
+    }
+  }
+  objs = objs.filter(o => !o.gone && o.d > -K * 0.5);
+  // particles, texts, streaks
+  for (const p of parts) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += (p.g || 0) * dt; }
+  parts = parts.filter(p => p.age < p.life);
+  for (const tx of texts) tx.age += dt;
+  texts = texts.filter(tx => tx.age < tx.life);
+  const want = Math.floor((sp / MAX_SPEED) * 26 + (boostT > 0 ? 30 : 0));
+  while (streaks.length < want) streaks.push({ x: rand(0, 1), y: rand(-0.2, 1), len: rand(0.05, 0.16), w: rand(1, 3) });
+  if (streaks.length > want) streaks.length = want;
+  for (const s of streaks) { s.y += dt * (sp / 600) * 1.6; if (s.y > 1.2) { s.y = rand(-0.3, -0.05); s.x = Math.random() < 0.5 ? rand(0, 0.22) : rand(0.78, 1); } }
+  // dust from the feet
+  if (!dead && Math.random() < dt * 30) parts.push({ x: laneX(laneVisual() > 0.5 ? 1 : 0, 0) + rand(-14, 14), y: playerY + 22, vx: rand(-30, 30), vy: rand(20, 80), life: 0.4, age: 0, r: rand(2, 5), c: boostT > 0 ? 'rgba(255,170,60,0.9)' : 'rgba(255,255,255,0.55)' });
+  shake = Math.max(0, shake - dt * 30); flash = Math.max(0, flash - dt * 2);
+  if (dead && deadT > 0.9 && state === 'run') gameOver();
+  updateHUD();
+}
+function collectYuzu(o) {
+  yuzu++; combo++; comboT = 1.2; score += 10 + combo;
+  Sound.yuzu(combo);
+  const x = laneX(o.lane, 0);
+  for (let i = 0; i < 8; i++) parts.push({ x, y: playerY - 10, vx: rand(-140, 140), vy: rand(-220, -40), g: 500, life: 0.5, age: 0, r: rand(2, 4), c: i % 2 ? '#ffd27a' : '#ffa236' });
+  if (combo % 10 === 0) float(`유자 ${combo}콤보!`, x, playerY - 90, '#ffe9a8', 0.9, 28);
+}
+function burst(o, n, colors) {
+  const x = o.kind === 'crab' ? W / 2 + (o.x * 2 - 1) * roadHalf * 0.5 : laneX(o.lane, 0);
+  for (let i = 0; i < n; i++) parts.push({ x, y: playerY - 20, vx: rand(-420, 420), vy: rand(-520, -80), g: 1100, life: rand(0.5, 0.9), age: 0, r: rand(4, 10), c: colors[i % colors.length], spin: rand(-12, 12), sq: true });
+}
+function smash(o) {
+  o.gone = true; smashed++; smashCombo++;
+  const pts = 25 * Math.min(smashCombo, 10);
+  score += pts;
+  burst(o, 22, o.kind === 'log' ? ['#a8743f', '#d9a066', '#6e4a2f'] : o.kind === 'crab' ? ['#ff6b5a', '#ffb3a6', '#c8402a'] : ['#9aa3a0', '#c9cfcb', '#6f7773']);
+  hitstop = 0.045; shake = 14; flash = 0.25;
+  Sound.smash(); buzz(25);
+  float(`쾅! +${pts}`, W / 2 + rand(-40, 40), playerY - 110, '#fff', 0.8, 30 + Math.min(20, smashCombo * 2));
+}
+function die(o) {
+  dead = true; deadT = 0; hitstop = 0.14; shake = 22; flash = 0.8; slowmo = 0.6;
+  Sound.hit(); Sound.musicOn(false); buzz([40, 30, 60]);
+  burst(o, 12, ['#ffffff', '#ffd27a']);
+}
+function gameOver() {
+  state = 'over';
+  const s = Math.floor(score), isBest = s > save.best;
+  save.runs++; save.yuzu += yuzu; if (isBest) save.best = s; writeSave();
+  $('#resultTitle').textContent = isBest ? '새 기록이에요!' : ['쿵!', '아이고!', '어이쿠!'][Math.floor(Math.random() * 3)];
+  $('#resultScore').textContent = s.toLocaleString('ko-KR');
+  $('#newBest').hidden = !isBest;
+  const stats = [`거리 ${Math.floor(dist / 10).toLocaleString('ko-KR')}m`, `유자 ${yuzu}개`, `부순 장애물 ${smashed}개`, `아슬아슬 ${nearCount}번`, `최고 ${save.best.toLocaleString('ko-KR')}`];
+  $('#resultStats').replaceChildren(...stats.map(x => Object.assign(document.createElement('span'), { textContent: x })));
+  $('#hud').hidden = true; $('#result').hidden = false;
+}
+function updateHUD() {
+  $('#score').textContent = Math.floor(score).toLocaleString('ko-KR');
+  $('#best').textContent = `최고 ${save.best.toLocaleString('ko-KR')} · ${Math.floor(dist / 10)}m`;
+  $('#yuzuCount').textContent = yuzu;
+}
+
+// ---------- drawing ----------
+const SKY = ['#8fd3f4', '#d8f1ff'];
+function drawWorld() {
+  const boosting = boostT > 0;
+  // sky and far hills
+  const sky = g.createLinearGradient(0, 0, 0, horizon + 40);
+  sky.addColorStop(0, boosting ? '#ffb27a' : SKY[0]); sky.addColorStop(1, boosting ? '#ffe2b8' : SKY[1]);
+  g.fillStyle = sky; g.fillRect(0, 0, W, horizon + 40);
+  g.fillStyle = boosting ? '#e8a07a' : '#9fd3a8';
+  g.beginPath(); g.moveTo(0, horizon + 4);
+  for (let x = 0; x <= W; x += 40) g.lineTo(x, horizon - 10 - Math.sin(x * 0.012 + 1) * 14 - Math.sin(x * 0.031) * 6);
+  g.lineTo(W, horizon + 4); g.closePath(); g.fill();
+  // grass
+  const grass = g.createLinearGradient(0, horizon, 0, H);
+  grass.addColorStop(0, '#9ad58a'); grass.addColorStop(1, '#5fb35a');
+  g.fillStyle = grass; g.fillRect(0, horizon, W, H - horizon);
+  // grass stripes rushing by
+  for (let k = 0; k < 18; k++) {
+    const d = ((k * 140 - dist) % (18 * 140) + 18 * 140) % (18 * 140) - 120;
+    const d2 = d + 70;
+    if (k % 2) continue;
+    g.fillStyle = 'rgba(255,255,255,0.06)';
+    g.fillRect(0, yAt(d2), W, Math.max(1, yAt(d) - yAt(d2)));
+  }
+  // road: a trapezoid toward the horizon
+  const far = 3000;
+  g.fillStyle = '#e9d7b6';
+  g.beginPath();
+  g.moveTo(W / 2 - roadHalf * scaleAt(far), yAt(far)); g.lineTo(W / 2 + roadHalf * scaleAt(far), yAt(far));
+  g.lineTo(W / 2 + roadHalf * scaleAt(-K * 0.55), yAt(-K * 0.55)); g.lineTo(W / 2 - roadHalf * scaleAt(-K * 0.55), yAt(-K * 0.55));
+  g.closePath(); g.fill();
+  // road edges
+  g.strokeStyle = '#cdb68c'; g.lineWidth = 3;
+  for (const s of [-1, 1]) { g.beginPath(); g.moveTo(W / 2 + s * roadHalf * scaleAt(far), yAt(far)); g.lineTo(W / 2 + s * roadHalf * scaleAt(-K * 0.55), yAt(-K * 0.55)); g.stroke(); }
+  // centre dashes
+  g.fillStyle = '#fff8e6';
+  for (let k = 0; k < 30; k++) {
+    const d = ((k * 110 - dist) % 3300 + 3300) % 3300 - 140;
+    const d2 = d + 55, y1 = yAt(d), y2 = yAt(d2), w1 = 6 * scaleAt(d), w2 = 6 * scaleAt(d2);
+    g.beginPath(); g.moveTo(W / 2 - w2, y2); g.lineTo(W / 2 + w2, y2); g.lineTo(W / 2 + w1, y1); g.lineTo(W / 2 - w1, y1); g.closePath(); g.fill();
+  }
+}
+function drawScenery() {
+  const items = scenery.slice().sort((a, b) => b.d - a.d);
+  for (const s of items) {
+    if (s.d > 2800) continue;
+    const sc = scaleAt(s.d), x = W / 2 + s.side * roadHalf * s.off * sc, y = yAt(s.d);
+    if (s.kind === 'tree') {
+      g.fillStyle = '#7a5233'; g.fillRect(x - 6 * sc, y - 40 * sc, 12 * sc, 40 * sc);
+      g.fillStyle = s.hue < 0.5 ? '#4f9a5a' : '#5fae6b';
+      g.beginPath(); g.arc(x, y - 62 * sc, 34 * sc, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.15)'; g.beginPath(); g.arc(x - 10 * sc, y - 72 * sc, 14 * sc, 0, TAU); g.fill();
+      if (s.hue > 0.7) { g.fillStyle = '#ffa236'; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(x + Math.cos(i * 2.1) * 20 * sc, y - 60 * sc + Math.sin(i * 2.1) * 14 * sc, 5 * sc, 0, TAU); g.fill(); } }
+    } else if (s.kind === 'bush') {
+      g.fillStyle = '#5aa760'; g.beginPath(); g.ellipse(x, y - 12 * sc, 30 * sc, 18 * sc, 0, 0, TAU); g.fill();
+    } else if (s.kind === 'lantern') {
+      g.fillStyle = '#6e4a2f'; g.fillRect(x - 3 * sc, y - 60 * sc, 6 * sc, 60 * sc);
+      g.fillStyle = '#ff6b5a'; g.beginPath(); g.ellipse(x, y - 66 * sc, 12 * sc, 15 * sc, 0, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(255,230,150,0.6)'; g.beginPath(); g.ellipse(x, y - 66 * sc, 6 * sc, 9 * sc, 0, 0, TAU); g.fill();
+    } else if (s.kind === 'flower') {
+      for (let i = 0; i < 4; i++) { g.fillStyle = i % 2 ? '#ff9fb2' : '#fff1a8'; g.beginPath(); g.arc(x + (i - 1.5) * 9 * sc, y - 4 * sc - (i % 2) * 5 * sc, 5 * sc, 0, TAU); g.fill(); }
+    } else {
+      g.strokeStyle = '#7fa65b'; g.lineWidth = Math.max(1, 3 * sc);
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(x + (i - 1) * 6 * sc, y); g.lineTo(x + (i - 1) * 9 * sc, y - 34 * sc); g.stroke(); }
+    }
+  }
+}
+function drawYuzu(x, y, r, glow) {
+  if (glow) { g.fillStyle = 'rgba(255,200,90,0.35)'; g.beginPath(); g.arc(x, y, r * 1.6, 0, TAU); g.fill(); }
+  g.fillStyle = '#ffa236'; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  g.fillStyle = '#ffc56b'; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.35, r * 0.35, 0, TAU); g.fill();
+  g.fillStyle = '#5fae6b'; g.beginPath(); g.ellipse(x + r * 0.45, y - r * 0.95, r * 0.5, r * 0.24, -0.5, 0, TAU); g.fill();
+}
+function drawObj(o) {
+  const sc = scaleAt(o.d), y = yAt(o.d);
+  const x = o.kind === 'crab' ? W / 2 + (o.x * 2 - 1) * roadHalf * 0.5 * sc : laneX(o.lane, o.d);
+  const S = sc * (Math.min(W, 520) / 420);
+  // shadow
+  g.fillStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.ellipse(x, y + 4 * S, 34 * S, 9 * S, 0, 0, TAU); g.fill();
+  if (o.kind === 'rock') {
+    g.fillStyle = '#8e9692';
+    g.beginPath(); g.moveTo(x - 34 * S, y); g.lineTo(x - 26 * S, y - 34 * S); g.lineTo(x - 2 * S, y - 50 * S); g.lineTo(x + 26 * S, y - 38 * S); g.lineTo(x + 36 * S, y); g.closePath(); g.fill();
+    g.fillStyle = '#b4bbb7'; g.beginPath(); g.moveTo(x - 22 * S, y - 30 * S); g.lineTo(x - 2 * S, y - 44 * S); g.lineTo(x + 8 * S, y - 30 * S); g.closePath(); g.fill();
+  } else if (o.kind === 'log') {
+    g.fillStyle = '#9b6a3c'; g.beginPath(); g.roundRect ? g.roundRect(x - 40 * S, y - 26 * S, 80 * S, 26 * S, 12 * S) : g.rect(x - 40 * S, y - 26 * S, 80 * S, 26 * S); g.fill();
+    g.fillStyle = '#d9a066'; g.beginPath(); g.ellipse(x + 34 * S, y - 13 * S, 8 * S, 13 * S, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#7a5233'; g.lineWidth = 2 * S; g.beginPath(); g.ellipse(x + 34 * S, y - 13 * S, 4 * S, 7 * S, 0, 0, TAU); g.stroke();
+  } else if (o.kind === 'crab') {
+    const wob = Math.sin(t * 20) * 3 * S;
+    g.fillStyle = '#ff6b5a'; g.beginPath(); g.ellipse(x, y - 16 * S, 28 * S, 18 * S, 0, 0, TAU); g.fill();
+    for (const s of [-1, 1]) { g.beginPath(); g.arc(x + s * 34 * S, y - 30 * S + wob * s, 10 * S, 0, TAU); g.fill(); }
+    g.fillStyle = '#fff'; for (const s of [-1, 1]) { g.beginPath(); g.arc(x + s * 9 * S, y - 32 * S, 5 * S, 0, TAU); g.fill(); }
+    g.fillStyle = '#23302c'; for (const s of [-1, 1]) { g.beginPath(); g.arc(x + s * 9 * S, y - 32 * S, 2.4 * S, 0, TAU); g.fill(); }
+  } else if (o.kind === 'yuzu') {
+    drawYuzu(x, y - 22 * S + Math.sin(t * 6 + o.d * 0.02) * 4 * S, 13 * S, false);
+  } else {
+    const pulse = 1 + Math.sin(t * 8) * 0.08;
+    const col = o.kind === 'rocket' ? '#ff5a3c' : o.kind === 'magnet' ? '#7a6cff' : '#5ab8ff';
+    g.fillStyle = col + '44'; g.beginPath(); g.arc(x, y - 30 * S, 30 * S * pulse, 0, TAU); g.fill();
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(x, y - 30 * S, 22 * S, 0, TAU); g.fill();
+    g.strokeStyle = col; g.lineWidth = 4 * S; g.stroke();
+    if (o.kind === 'rocket') {
+      g.fillStyle = col; g.beginPath(); g.moveTo(x, y - 46 * S); g.quadraticCurveTo(x + 10 * S, y - 32 * S, x + 6 * S, y - 20 * S); g.lineTo(x - 6 * S, y - 20 * S); g.quadraticCurveTo(x - 10 * S, y - 32 * S, x, y - 46 * S); g.fill();
+      g.fillStyle = '#ffa236'; g.beginPath(); g.moveTo(x - 5 * S, y - 20 * S); g.lineTo(x, y - 12 * S + Math.sin(t * 30) * 2 * S); g.lineTo(x + 5 * S, y - 20 * S); g.fill();
+    } else if (o.kind === 'magnet') {
+      g.strokeStyle = col; g.lineWidth = 7 * S; g.lineCap = 'butt';
+      g.beginPath(); g.arc(x, y - 34 * S, 10 * S, Math.PI, 0, true); g.stroke();
+      g.strokeStyle = '#ff5a3c'; g.beginPath(); g.moveTo(x - 10 * S, y - 34 * S); g.lineTo(x - 10 * S, y - 26 * S); g.moveTo(x + 10 * S, y - 34 * S); g.lineTo(x + 10 * S, y - 26 * S); g.stroke();
+    } else {
+      g.fillStyle = 'rgba(160,215,255,0.8)'; g.beginPath(); g.arc(x - 6 * S, y - 34 * S, 7 * S, 0, TAU); g.arc(x + 6 * S, y - 28 * S, 9 * S, 0, TAU); g.fill();
+    }
+  }
+}
+function drawCapy() {
+  const lv = laneVisual(), x = W / 2 + (lv * 2 - 1) * roadHalf * 0.5;
+  const S = Math.min(W, 520) / 420;
+  const run = t * (14 + speed / 120), bob = dead ? 0 : Math.abs(Math.sin(run)) * 5 * S;
+  const tilt = (lane - laneFrom) * (1 - clamp(laneT, 0, 1)) * 0.35;
+  const squash = laneT < 1 ? 1 + Math.sin(clamp(laneT, 0, 1) * Math.PI) * 0.15 : 1;
+  let y = playerY - bob;
+  if (dead) { y -= Math.sin(Math.min(1, deadT * 2) * Math.PI) * 60 * S; }
+  // boost afterimages and flame
+  if (boostT > 0) {
+    for (let i = 3; i >= 1; i--) { g.globalAlpha = 0.12 * (4 - i); g.fillStyle = '#ff7a4a'; g.beginPath(); g.ellipse(x, y + i * 26 * S, 30 * S, 38 * S, 0, 0, TAU); g.fill(); }
+    g.globalAlpha = 1;
+    const fl = 40 + Math.sin(t * 40) * 10;
+    const grad = g.createLinearGradient(x, y + 30 * S, x, y + (30 + fl) * S);
+    grad.addColorStop(0, '#fff3a8'); grad.addColorStop(0.4, '#ffa236'); grad.addColorStop(1, 'rgba(255,90,60,0)');
+    g.fillStyle = grad; g.beginPath(); g.moveTo(x - 16 * S, y + 26 * S); g.lineTo(x, y + (30 + fl) * S); g.lineTo(x + 16 * S, y + 26 * S); g.closePath(); g.fill();
+  }
+  g.save();
+  g.translate(x, y);
+  g.rotate(dead ? deadT * 10 : tilt);
+  g.scale(1 / squash, squash);
+  // shadow
+  g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(0, 30 * S + bob, 30 * S, 9 * S, 0, 0, TAU); g.fill();
+  // legs
+  g.fillStyle = '#7a5233';
+  for (const [lx, ph] of [[-16, 0], [16, Math.PI]]) { const k = Math.sin(run + ph); g.beginPath(); g.ellipse(lx * S, (20 + k * 6) * S, 7 * S, 9 * S, 0, 0, TAU); g.fill(); }
+  // body (seen from behind) and head
+  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, 4 * S, 28 * S, 34 * S, 0, 0, TAU); g.fill();
+  g.fillStyle = '#c48b5c'; g.beginPath(); g.ellipse(-8 * S, -6 * S, 10 * S, 16 * S, -0.3, 0, TAU); g.fill();
+  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, -32 * S, 22 * S, 18 * S, 0, 0, TAU); g.fill();
+  g.fillStyle = '#7a5233'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 15 * S, -44 * S, 6 * S, 5 * S, 0, 0, TAU); g.fill(); }
+  // yuzu on the head
+  drawYuzu(0, -54 * S, 9 * S, boostT > 0);
+  g.restore();
+  if (shield) { g.strokeStyle = 'rgba(120,200,255,0.9)'; g.lineWidth = 4; g.fillStyle = 'rgba(160,220,255,0.18)'; g.beginPath(); g.arc(x, y - 4 * S, 52 * S + Math.sin(t * 6) * 3, 0, TAU); g.fill(); g.stroke(); }
+  if (magnetT > 0) { g.strokeStyle = `rgba(122,108,255,${0.4 + Math.sin(t * 10) * 0.2})`; g.lineWidth = 3; g.setLineDash([6, 8]); g.beginPath(); g.arc(x, y - 4 * S, 70 * S, 0, TAU); g.stroke(); g.setLineDash([]); }
+}
+function render() {
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const sh = reduced ? 0 : shake;
+  g.save();
+  g.translate(rand(-sh, sh), rand(-sh, sh));
+  // a punchy zoom while boosting
+  if (boostT > 0 && !reduced) { const z = 1.04 + Math.sin(t * 20) * 0.006; g.translate(W / 2, playerY); g.scale(z, z); g.translate(-W / 2, -playerY); }
+  drawWorld();
+  drawScenery();
+  // objects far to near, the capybara drawn in its depth slot
+  const list = objs.slice().sort((a, b) => b.d - a.d);
+  let drawn = false;
+  for (const o of list) { if (!drawn && o.d < 0) { drawCapy(); drawn = true; } if (o.d < 2800) drawObj(o); }
+  if (!drawn) drawCapy();
+  // particles
+  for (const p of parts) {
+    const k = 1 - p.age / p.life;
+    g.globalAlpha = Math.max(0, k);
+    g.fillStyle = p.c;
+    if (p.sq) { g.save(); g.translate(p.x, p.y); g.rotate(p.age * (p.spin || 0)); g.fillRect(-p.r, -p.r, p.r * 2, p.r * 2); g.restore(); }
+    else { g.beginPath(); g.arc(p.x, p.y, p.r, 0, TAU); g.fill(); }
+  }
+  g.globalAlpha = 1;
+  g.restore();
+  // speed lines
+  if (!reduced) {
+    g.strokeStyle = boostT > 0 ? 'rgba(255,240,200,0.75)' : 'rgba(255,255,255,0.45)';
+    for (const s of streaks) { g.lineWidth = s.w; g.beginPath(); g.moveTo(s.x * W, s.y * H); g.lineTo(s.x * W, (s.y + s.len) * H); g.stroke(); }
+  }
+  // vignette while boosting, flash on impacts
+  if (boostT > 0) {
+    const v = g.createRadialGradient(W / 2, H * 0.6, Math.min(W, H) * 0.3, W / 2, H * 0.6, Math.max(W, H) * 0.75);
+    v.addColorStop(0, 'rgba(255,90,60,0)'); v.addColorStop(1, `rgba(255,90,60,${0.35 + Math.sin(t * 12) * 0.08})`);
+    g.fillStyle = v; g.fillRect(0, 0, W, H);
+    // boost timer bar
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(W * 0.2, H - 18, W * 0.6, 6);
+    g.fillStyle = '#fff'; g.fillRect(W * 0.2, H - 18, W * 0.6 * clamp(boostT / 5.5, 0, 1), 6);
+  }
+  if (flash > 0 && !reduced) { g.fillStyle = `rgba(255,255,255,${flash * 0.6})`; g.fillRect(0, 0, W, H); }
+  // floating texts
+  for (const tx of texts) {
+    const k = tx.age / tx.life, s = 1 + (k < 0.15 ? (0.15 - k) * 4 : 0);
+    g.globalAlpha = Math.min(1, (1 - k) * 2);
+    g.font = `${Math.round(tx.size * s)}px Jua, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 6; g.strokeStyle = 'rgba(35,48,44,0.55)'; g.strokeText(tx.text, tx.x, tx.y - k * 40);
+    g.fillStyle = tx.color; g.fillText(tx.text, tx.x, tx.y - k * 40);
+  }
+  g.globalAlpha = 1;
+  if (combo >= 3 && state === 'run') {
+    g.font = '22px Jua, sans-serif'; g.textAlign = 'right'; g.fillStyle = '#fff'; g.lineWidth = 5; g.strokeStyle = 'rgba(35,48,44,0.4)';
+    const txt = `유자 ${combo}콤보`; g.strokeText(txt, W - 16, H * 0.16 + 46); g.fillText(txt, W - 16, H * 0.16 + 46);
+  }
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function frame(now) {
+  let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (state === 'paused') { render(); requestAnimationFrame(frame); return; }
+  if (hitstop > 0) { hitstop -= dt; dt = 0; }
+  if (slowmo > 0) { slowmo -= dt; dt *= 0.35; }
+  if (state === 'title') { t += dt; dist += 300 * dt; for (const s of scenery) s.d -= 300 * dt; scenery = scenery.filter(s => s.d > -K * 0.55); while (scenery.length < 46) addScenery(Math.max(0, ...scenery.map(s => s.d)) + rand(50, 110)); laneT += dt / LANE_TIME; if (Math.random() < dt * 0.6) { laneFrom = laneNow(); lane = 1 - laneFrom; laneT = 0; } }
+  else update(dt);
+  if (state === 'run' && !dead) Sound.tickMusic(clamp((speed - BASE_SPEED) / (MAX_SPEED - BASE_SPEED), 0, 1), boostT > 0);
+  render();
+  requestAnimationFrame(frame);
+}
+reset();
+renderSound();
+$('#startNote').textContent = save.runs ? `최고 기록 ${save.best.toLocaleString('ko-KR')} · 지금까지 모은 유자 ${save.yuzu}개` : '스페이스바로도 길을 바꿀 수 있어요';
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
