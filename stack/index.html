@@ -169,6 +169,66 @@ const Sound = {
   setOn(on) { save.sound = on; writeSave(); if (this.master) this.master.gain.value = on ? 0.85 : 0; if (on) this.ensure(); },
 };
 
+// ---------- capybara sprites (SVG, one character design, drawn with outlines) ----------
+// viewBox 0 0 120 120; the feet rest at y ~ 110, centre x = 60
+const OUT = '#5a3b25', FUR = '#b98457', FUR_LIGHT = '#d4a273', FUR_DARK = '#8a5a38', MUZZLE = '#ddb07e', PAW = '#6e4a2f';
+const yuzuSVG = (x, y) => `<g transform="translate(${x} ${y})"><circle r="10" fill="#ffa236" stroke="${OUT}" stroke-width="2.5"/><circle cx="-3.5" cy="-3.5" r="3" fill="#ffd08a"/><path d="M2 -9 q7 -6 12 -2 q-6 4 -12 2z" fill="#5fae6b" stroke="${OUT}" stroke-width="2" stroke-linejoin="round"/></g>`;
+// rear view; lift = [left foot, right foot] in px, squash flattens the body as a foot lands
+function rearSVG(liftL, liftR, squash) {
+  const ry = 30 - squash * 3, cy = 76 + squash * 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <g stroke="${OUT}" stroke-width="3" stroke-linejoin="round">
+    <ellipse cx="43" cy="${108 - liftL}" rx="10" ry="6.5" fill="${PAW}"/>
+    <ellipse cx="77" cy="${108 - liftR}" rx="10" ry="6.5" fill="${PAW}"/>
+    <ellipse cx="60" cy="${cy}" rx="35" ry="${ry}" fill="${FUR}"/>
+    <circle cx="35" cy="47" r="8" fill="${FUR}"/><circle cx="85" cy="47" r="8" fill="${FUR}"/>
+    <ellipse cx="44" cy="22" rx="4.5" ry="3.6" fill="${FUR_DARK}"/><ellipse cx="76" cy="22" rx="4.5" ry="3.6" fill="${FUR_DARK}"/>
+    <rect x="36" y="19" width="48" height="46" rx="17" fill="${FUR}"/>
+  </g>
+  <ellipse cx="60" cy="${cy - 10}" rx="17" ry="13" fill="${FUR_LIGHT}" opacity="0.7"/>
+  ${yuzuSVG(60, 15)}
+</svg>`;
+}
+// front view; eyes: 'dot' | 'happy' | 'squint' | 'star' | 'dizzy'
+function frontSVG(eyes, liftL = 0, liftR = 0, withYuzu = true) {
+  const eye = x0 => {
+    const x = x0 < 60 ? 46 : 74;
+    if (eyes === 'happy') return `<path d="M${x - 5} 43 q5 -5 10 0" stroke="${OUT}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
+    if (eyes === 'squint') return `<path d="M${x - 4} 38 l${x < 60 ? 7 : -7} 4 l${x < 60 ? -7 : 7} 4" stroke="${OUT}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    if (eyes === 'star') return `<path d="M${x} 35 l2 4.5 l5 .5 l-4 3 l1.5 5 l-4.5 -2.8 l-4.5 2.8 l1.5 -5 l-4 -3 l5 -.5z" fill="#fff6b0" stroke="#e08a00" stroke-width="1.5" stroke-linejoin="round"/>`;
+    if (eyes === 'wow') return `<circle cx="${x}" cy="41" r="5" fill="#fff" stroke="${OUT}" stroke-width="2.2"/><circle cx="${x + (x < 60 ? 1 : -1)}" cy="41.5" r="2.4" fill="${OUT}"/>`;
+    if (eyes === 'dizzy') return `<path d="M${x - 4} 38 l8 8 M${x + 4} 38 l-8 8" stroke="${OUT}" stroke-width="3" stroke-linecap="round"/>`;
+    return `<path d="M${x - 4.2} 42 h8.4 a4.2 4.2 0 0 1 -8.4 0 z" fill="${OUT}"/><path d="M${x - 5.5} 41.6 h11" stroke="${OUT}" stroke-width="2.4" stroke-linecap="round"/>`;
+  };
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <g stroke="${OUT}" stroke-width="3" stroke-linejoin="round">
+    <ellipse cx="45" cy="${108 - liftL}" rx="9" ry="6" fill="${PAW}"/>
+    <ellipse cx="75" cy="${108 - liftR}" rx="9" ry="6" fill="${PAW}"/>
+    <ellipse cx="60" cy="82" rx="33" ry="26" fill="${FUR}"/>
+    <ellipse cx="41" cy="16" rx="4.5" ry="3.6" fill="${FUR_DARK}"/><ellipse cx="79" cy="16" rx="4.5" ry="3.6" fill="${FUR_DARK}"/>
+    <rect x="33" y="14" width="54" height="64" rx="19" fill="${FUR}"/>
+  </g>
+  <rect x="38" y="55" width="44" height="20" rx="10" fill="${MUZZLE}" opacity="0.55"/>
+  <ellipse cx="60" cy="90" rx="18" ry="13" fill="${FUR_LIGHT}"/>
+  ${eye(45)}${eye(75)}
+  <rect x="49" y="59" width="22" height="7" rx="3.5" fill="#4a3020"/><path d="M53 61 h3 M64 61 h3" stroke="#8a6040" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M56 70.5 q4 2.5 8 0" stroke="${OUT}" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <ellipse cx="40" cy="56" rx="5" ry="3" fill="#ff9aa8" opacity="0.4"/><ellipse cx="80" cy="56" rx="5" ry="3" fill="#ff9aa8" opacity="0.4"/>
+  ${withYuzu ? yuzuSVG(60, 12) : ''}
+</svg>`;
+}
+const spriteCache = new Map();
+function sprite(key, svg) {
+  if (!spriteCache.has(key)) { const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); spriteCache.set(key, img); }
+  return spriteCache.get(key);
+}
+const CAPY = {
+  calm: sprite('sc', frontSVG('dot', 0, 0, false)),
+  happy: sprite('sh', frontSVG('happy', 0, 0, false)),
+  wow: sprite('sw', frontSVG('wow', 0, 0, false)),
+};
+const CAPY_K = 2.3;   // px per sprite unit: the 54-unit head is about as wide as the platform
+
 // ---------- fruits ----------
 const FRUITS = {
   yuzu:  { name: '유자',   w: 58, h: 48, ch: 18, color: '#ffa236', light: '#ffc56b', density: 0.0012, weight: 4 },
@@ -203,7 +263,7 @@ let hearts = 3, count = 0, bestTop = 0, perfectStreak = 0, maxCount = 0, holding
 let swing = { x: 0, phase: 0, speed: 1.4, amp: 110 }, wind = 0, windT = 0, windIn = 0, freezeT = 0;
 let lastLoss = -9, parts = [], texts = [], milestonesHit = new Set(), creakT = 0, sweat = 0, headX = 0, headTarget = 0, refillT = 0, overT = -1;
 const HEAD_W = 128, HEAD_H = 22;
-const headTopY = () => WG - 150;   // where the capybara's head platform sits
+const headTopY = () => WG - (110 - 14) * CAPY_K;   // the sprite's head top sits here, feet on the ground
 
 function reset() {
   WG = GROUND;
@@ -253,7 +313,7 @@ function onCollide(ev) {
       // perfect: right on top of whatever it landed on
       const dx = Math.abs(a.position.x - b.position.x);
       if (b.label !== 'ground' && dx < 7 && f.kind !== 'lemon') {
-        perfectStreak++;
+        perfectStreak++; happyT = 0.8;
         Body.setPosition(a, { x: b.position.x, y: a.position.y });
         Body.setVelocity(a, { x: b.velocity.x, y: a.velocity.y });
         float(perfectStreak > 1 ? `퍼펙트 x${perfectStreak}!` : '퍼펙트!', a.position.x, a.position.y - 50, '#fff');
@@ -389,6 +449,7 @@ function update(dt) {
   const lean = topFruit ? (topFruit.body.position.x - head.position.x) / HEAD_W : 0;
   sweat = clamp(Math.abs(lean) * 1.6 - 0.3, 0, 1);
   creakT -= dt;
+  if (happyT > 0) happyT -= dt;
   if (sweat > 0.5 && creakT <= 0) { Sound.creak(); creakT = 0.8; }
   for (const p of parts) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.g * dt; }
   parts = parts.filter(p => p.age < p.life);
@@ -503,37 +564,27 @@ function render() {
   g.globalAlpha = 1;
   g.restore();
 }
+let happyT = 0;
 function drawCapy() {
   const x = head.position.x, top = head.position.y - HEAD_H / 2;
-  const lean = (headTarget - headX) * 0.004;
-  g.save(); g.translate(x, WG); g.rotate(clamp(lean, -0.12, 0.12));
-  // shadow and feet
-  g.fillStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.ellipse(0, 4, 90, 12, 0, 0, TAU); g.fill();
-  g.fillStyle = '#7a5233'; for (const fx of [-50, -20, 25, 55]) { g.beginPath(); g.ellipse(fx, -8, 14, 12, 0, 0, TAU); g.fill(); }
-  // body facing the viewer
-  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, -60, 92, 58, 0, 0, TAU); g.fill();
-  // head: a broad flat top that carries the tower
-  const hy = top - WG;
-  g.beginPath(); g.roundRect ? g.roundRect(-70, hy - 4, 140, 92, 34) : g.rect(-70, hy - 4, 140, 92); g.fill();
-  g.fillStyle = '#8f5f3c'; g.beginPath(); g.roundRect ? g.roundRect(-42, hy + 46, 84, 44, 20) : g.rect(-42, hy + 46, 84, 44); g.fill();
-  g.fillStyle = '#7a5233'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 62, hy + 6, 13, 10, 0, 0, TAU); g.fill(); }
-  // nostrils
-  g.fillStyle = '#3b2a1e'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 12, hy + 60, 4, 6, 0, 0, TAU); g.fill(); }
-  // eyes: calm while steady, wide open when the tower leans
-  g.strokeStyle = '#2b2420'; g.fillStyle = '#2b2420'; g.lineWidth = 3.2; g.lineCap = 'round';
-  for (const s of [-1, 1]) {
-    if (sweat > 0.35) { g.beginPath(); g.arc(s * 34, hy + 30, 6, 0, TAU); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(s * 34 + 2, hy + 28, 2, 0, TAU); g.fill(); g.fillStyle = '#2b2420'; }
-    else { g.beginPath(); g.moveTo(s * 34 - 8, hy + 30); g.quadraticCurveTo(s * 34, hy + 24, s * 34 + 8, hy + 30); g.stroke(); }
+  const lean = clamp((headTarget - headX) * 0.004, -0.1, 0.1);
+  const img = sweat > 0.35 ? CAPY.wow : happyT > 0 ? CAPY.happy : CAPY.calm;
+  g.save(); g.translate(x, WG); g.rotate(lean);
+  g.fillStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.ellipse(0, 2, 70, 10, 0, 0, TAU); g.fill();
+  if (img.complete && img.naturalWidth) g.drawImage(img, -60 * CAPY_K, top - WG - 14 * CAPY_K, 120 * CAPY_K, 120 * CAPY_K);
+  if (sweat > 0.5) {
+    const sx = 30 * CAPY_K, sy = top - WG + 22 * CAPY_K;
+    g.fillStyle = '#8fd0f0'; g.strokeStyle = '#5a3b25'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(sx, sy); g.quadraticCurveTo(sx + 9, sy + 14, sx, sy + 18); g.quadraticCurveTo(sx - 9, sy + 14, sx, sy); g.fill(); g.stroke();
   }
-  g.fillStyle = 'rgba(255,140,150,0.45)'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 50, hy + 44, 10, 6, 0, 0, TAU); g.fill(); }
-  if (sweat > 0.5) { g.fillStyle = '#8fd0f0'; g.beginPath(); g.moveTo(58, hy + 14); g.quadraticCurveTo(66, hy + 28, 58, hy + 32); g.quadraticCurveTo(50, hy + 28, 58, hy + 14); g.fill(); }
   g.restore();
 }
 
 // ---------- loop ----------
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
+  // rAF can hand us a timestamp slightly before the one we started from; time never runs backwards
+  const dt = clamp((now - last) / 1000, 0, 1 / 30); last = now;
   if (state === 'title') { t += dt; swing.phase += dt * 1.2; swing.x = W / 2 + Math.sin(swing.phase) * 100; }
   else update(dt);
   render();
