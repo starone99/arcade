@@ -236,7 +236,7 @@ function spawnPattern() {
   const pick = () => (Math.random() < 0.55 ? 1 - lastPatternLane : lastPatternLane);
   // while boosting: walls to smash and yuzu to sweep, only as far as the boost will carry you
   if (boostT > 0 && base < boostT * sp - sp * 0.5) {
-    const l = 1 - lastPatternLane, n = 2 + Math.floor(Math.random() * 3);
+    const l = Math.random() < 0.5 ? 0 : 1, n = 2 + Math.floor(Math.random() * 3);
     for (let i = 0; i < n; i++) {
       const kind = ['rock', 'log', 'rock', 'crab'][Math.floor(Math.random() * 4)];
       objs.push(kind === 'crab' ? { kind, lane: l, d: base + i * 80, dir: 0, x: l, wait: 99 } : { kind, lane: l, d: base + i * 80 });
@@ -248,10 +248,10 @@ function spawnPattern() {
   }
   // jump ramp: a wall across both lanes comes up mid-flight, with yuzu up in the air
   if (boostT <= 0 && dist > 1800 && Math.random() < 0.14) {
-    const l = pick(), air = sp * AIR;
+    const l = pick(), air = sp * AIR, n = 3 + Math.floor(Math.random() * 3);
     objs.push({ kind: 'ramp', lane: l, d: base });
-    for (const w of [0, 1]) objs.push({ kind: Math.random() < 0.5 ? 'rock' : 'log', lane: w, d: base + air * 0.5 });
-    for (let i = 1; i <= 5; i++) objs.push({ kind: 'yuzu', lane: l, d: base + air * i / 6, air: true });
+    for (let i = 0; i < n; i++) objs.push({ kind: ['rock', 'log', 'rock'][i % 3], lane: l, d: base + air * (0.22 + 0.6 * i / (n - 1)) });
+    for (let i = 1; i <= 7; i++) objs.push({ kind: 'yuzu', lane: l, d: base + air * i / 8, air: true });
     lastPatternLane = l;
     nextSpawn = base + air + sp * rand(0.55, 0.8);
     return;
@@ -584,7 +584,7 @@ function drawObj(o) {
 function drawCapy() {
   const lv = laneVisual(), x = W / 2 + (lv * 2 - 1) * roadHalf * 0.5;
   const S = Math.min(W, 520) / 420;
-  const run = t * (14 + speed / 120), bob = dead ? 0 : Math.abs(Math.sin(run)) * 5 * S;
+  const run = t * (13 + speed / 140), bob = dead ? 0 : (1 - Math.cos(run)) / 2 * 6 * S;   // lifts off a little at full stretch
   const tilt = (lane - laneFrom) * (1 - clamp(laneT, 0, 1)) * 0.35;
   const squash = laneT < 1 ? 1 + Math.sin(clamp(laneT, 0, 1) * Math.PI) * 0.15 : 1;
   const hop = airT > 0 ? Math.sin(Math.PI * (1 - airT / AIR)) * 130 * S : 0;
@@ -605,27 +605,31 @@ function drawCapy() {
   g.scale(1 / squash, squash);
   // shadow
   g.fillStyle = `rgba(0,0,0,${0.18 * (1 - hop / (200 * S))})`; g.beginPath(); g.ellipse(0, 30 * S + bob + hop, 30 * S * (1 - hop / (300 * S)), 9 * S, 0, 0, TAU); g.fill();
-  // four legs in a gallop: the front pair reaches while the back pair pushes
-  const gait = dead ? 0 : run;
-  g.fillStyle = '#6e4a2f';
+  // seen from behind and above: a long body with four paws at its corners, galloping.
+  // e = 0 gathered (paws tucked under, body short), e = 1 extended (front paws reach, hind paws kick, body long and off the ground)
+  const e = dead ? 0.3 : (1 - Math.cos(run)) / 2;
+  const L = (60 + e * 16) * S, rx = (25 - e * 2) * S, cy = (8 - e * 6) * S;
+  const shoulder = cy - L / 2 + 14 * S, hip = cy + L / 2 - 14 * S, headY = cy - L / 2 - 6 * S;
+  const leg = (sx, sy, px, py, w) => {
+    g.strokeStyle = '#6e4a2f'; g.lineWidth = w; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(sx, sy); g.lineTo(px, py); g.stroke();
+    g.fillStyle = '#4e3220'; g.beginPath(); g.ellipse(px, py, w * 0.62, w * 0.42, 0, 0, TAU); g.fill();
+  };
   for (const s of [-1, 1]) {
-    const k = Math.sin(gait + Math.PI + s * 0.35);
-    g.beginPath(); g.ellipse(s * (25 + k * 2) * S, (-14 + k * 7) * S, 6.5 * S, (9 + Math.max(0, -k) * 4) * S, s * 0.25, 0, TAU); g.fill();
+    // a slight lead: one side lands a moment before the other
+    const ef = dead ? 0.3 : (1 - Math.cos(run + s * 0.45)) / 2, eh = dead ? 0.3 : (1 - Math.cos(run + s * 0.3)) / 2;
+    // front legs stay under the chest; only the paws peek out beside the head when they reach
+    leg(s * 10 * S, shoulder + 4 * S, s * (14 + ef * 3) * S, shoulder + (10 - ef * 24) * S, 7.5 * S);
+    leg(s * 15 * S, hip, s * (20 + eh * 3) * S, hip + (eh * 22 - (1 - eh) * 12) * S, 11 * S);
   }
-  g.fillStyle = '#7a5233';
-  for (const s of [-1, 1]) {
-    const k = Math.sin(gait + s * 0.35);
-    g.beginPath(); g.ellipse(s * 17 * S, (22 + k * 8) * S, 8 * S, (10 + Math.max(0, k) * 5) * S, 0, 0, TAU); g.fill();
-    g.fillStyle = '#5a3b25'; g.beginPath(); g.ellipse(s * 17 * S, (30 + k * 8 + Math.max(0, k) * 4) * S, 6 * S, 3 * S, 0, 0, TAU); g.fill(); g.fillStyle = '#7a5233';
-  }
-  // body (seen from behind) stretching and gathering with each stride, then the head
-  const stride = dead ? 1 : 1 + Math.sin(gait) * 0.05;
-  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, 4 * S, 28 * S / stride, 34 * S * stride, 0, 0, TAU); g.fill();
-  g.fillStyle = '#c48b5c'; g.beginPath(); g.ellipse(-8 * S, -6 * S, 10 * S, 16 * S, -0.3, 0, TAU); g.fill();
-  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, -32 * S, 22 * S, 18 * S, 0, 0, TAU); g.fill();
-  g.fillStyle = '#7a5233'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 15 * S, -44 * S, 6 * S, 5 * S, 0, 0, TAU); g.fill(); }
+  // body, a lighter stripe down the spine, then the head reaching forward
+  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, cy, rx, L / 2, 0, 0, TAU); g.fill();
+  g.fillStyle = '#c48b5c'; g.beginPath(); g.ellipse(0, cy - 2 * S, rx * 0.38, L * 0.38, 0, 0, TAU); g.fill();
+  g.fillStyle = '#a06c44'; g.beginPath(); g.ellipse(0, hip + 2 * S, rx * 0.8, 10 * S, 0, 0, TAU); g.fill();
+  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, headY, 17 * S, 15 * S, 0, 0, TAU); g.fill();
+  g.fillStyle = '#7a5233'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 12 * S, headY - 8 * S, 5.5 * S, 4.5 * S, 0, 0, TAU); g.fill(); }
   // yuzu on the head
-  drawYuzu(0, -54 * S, 9 * S, boostT > 0);
+  drawYuzu(0, headY - 15 * S, 8.5 * S, boostT > 0);
   g.restore();
   if (shield) { g.strokeStyle = 'rgba(120,200,255,0.9)'; g.lineWidth = 4; g.fillStyle = 'rgba(160,220,255,0.18)'; g.beginPath(); g.arc(x, y - 4 * S, 52 * S + Math.sin(t * 6) * 3, 0, TAU); g.fill(); g.stroke(); }
 }
