@@ -209,15 +209,15 @@ const laneX = (lane, d) => W / 2 + (lane === 0 ? -1 : 1) * roadHalf * 0.5 * scal
 // ---------- game state ----------
 const LANE_TIME = 0.12;
 let state = 'title', t = 0, dist = 0, speed = 0, score = 0, yuzu = 0, combo = 0, comboT = 0, smashCombo = 0, nearCount = 0, smashed = 0;
-let lane = 1, laneFrom = 1, laneT = 1, boostT = 0, shield = false, hitstop = 0, slowmo = 0, shake = 0, flash = 0, dead = false, deadT = 0;
-let rings = [], zoomKick = 0, airT = 0, objs = [], parts = [], texts = [], streaks = [], scenery = [], nextSpawn = 0, lastPatternLane = 0, speedLevel = 0, rocketIn = 0, itemIn = 0;
+let lane = 1, laneFrom = 1, laneT = 1, boostT = 0, hitstop = 0, slowmo = 0, shake = 0, flash = 0, dead = false, deadT = 0;
+let rings = [], zoomKick = 0, airT = 0, objs = [], parts = [], texts = [], streaks = [], scenery = [], nextSpawn = 0, lastPatternLane = 0, speedLevel = 0, rocketIn = 0, face = 1, nearT = 0, yuzuAng = 0, yuzuVel = 0;
 const BASE_SPEED = 600, MAX_SPEED = 1500, BOOST_MUL = 2.2, RAMP_SECS = 120;   // linear climb to 2.5x, then hold (like the Chrome dino)
 const AIR = 0.85;   // seconds airborne after a jump ramp
 
 function reset() {
   t = 0; dist = 0; speed = BASE_SPEED; score = 0; yuzu = 0; combo = 0; comboT = 0; nearCount = 0; smashed = 0; smashCombo = 0;
-  lane = 1; laneFrom = 1; laneT = 1; boostT = 0; shield = false; hitstop = 0; slowmo = 0; shake = 0; flash = 0; dead = false; deadT = 0;
-  objs = []; parts = []; texts = []; rings = []; zoomKick = 0; airT = 0; nextSpawn = 900; speedLevel = 0; rocketIn = rand(9, 13); itemIn = rand(14, 20);
+  lane = 1; laneFrom = 1; laneT = 1; boostT = 0; hitstop = 0; slowmo = 0; shake = 0; flash = 0; dead = false; deadT = 0;
+  objs = []; parts = []; texts = []; rings = []; zoomKick = 0; airT = 0; nextSpawn = 900; speedLevel = 0; rocketIn = rand(9, 13); face = 1; nearT = 0; yuzuAng = 0; yuzuVel = 0;
   scenery = [];
   for (let d = -200; d < 2400; d += rand(60, 120)) addScenery(d);
 }
@@ -262,13 +262,6 @@ function spawnPattern() {
     for (let i = 1; i <= 3; i++) objs.push({ kind: 'yuzu', lane: l, d: base - i * 70 });
     rocketIn = rand(18, 26);
     nextSpawn = base + gap * 1.4;
-    return;
-  }
-  if (itemIn <= 0) {
-    const l = pick();
-    objs.push({ kind: 'bubble', lane: l, d: base });
-    itemIn = rand(13, 19);
-    nextSpawn = base + gap;
     return;
   }
   const r = Math.random();
@@ -323,6 +316,7 @@ function tap() {
   if (threat && boostT <= 0) {
     nearCount++; score += 15 * (1 + speedLevel);
     float('아슬아슬! +' + 15 * (1 + speedLevel), laneX(laneFrom, 0), playerY - 60, '#fff');
+    nearT = 0.55;
     rings.push({ x: laneX(laneFrom, 0), y: playerY - 10, age: 0 }); flash = Math.max(flash, 0.15); shake = Math.max(shake, 4); Sound.near(); buzz(15);
   }
   for (let i = 0; i < 6; i++) parts.push({ x: laneX(laneFrom, 0), y: playerY + 18, vx: rand(-60, 60) + (lane - laneFrom) * 120, vy: rand(-40, 10), life: 0.35, age: 0, r: rand(3, 6), c: 'rgba(255,255,255,0.8)' });
@@ -351,6 +345,15 @@ function float(text, x, y, color, life = 0.9, size = 24) {
 const isHazard = o => o.kind === 'rock' || o.kind === 'log' || o.kind === 'crab';
 
 // ---------- update ----------
+function animateCapy(dt) {
+  const target = laneT < 1 ? (lane > laneFrom ? 1 : -1) : (laneNow() === 0 ? 1 : -1);
+  face += (target - face) * Math.min(1, dt * 12);
+  if (nearT > 0) nearT -= dt;
+  // a little spring for the yuzu: the body's bounce and lane changes kick it
+  const run = t * (15 + speed / 120);
+  yuzuVel += (-yuzuAng * 160 - yuzuVel * 9) * dt + Math.cos(run * 2) * dt * 4 + (laneT < 1 ? (laneFrom - lane) * dt * 30 : 0);
+  yuzuAng = clamp(yuzuAng + yuzuVel * dt, -0.6, 0.6);
+}
 function update(dt) {
   if (state !== 'run' && state !== 'over') return;
   t += dt;
@@ -364,9 +367,10 @@ function update(dt) {
     score += sp * dt * 0.02 * (boostT > 0 ? 2 : 1);
   }
   laneT += dt / LANE_TIME;
+  animateCapy(dt);
   if (airT > 0) { airT -= dt; if (airT <= 0) { Sound.land(); shake = Math.max(shake, 5); for (let i = 0; i < 10; i++) parts.push({ x: laneX(laneNow(), 0) + rand(-20, 20), y: playerY + 24, vx: rand(-160, 160), vy: rand(-120, -20), g: 400, life: 0.45, age: 0, r: rand(3, 6), c: 'rgba(255,255,255,0.85)' }); } }
   if (boostT > 0) { boostT -= dt; if (boostT <= 0) { smashCombo = 0; float('부스트 끝', W / 2, H * 0.4, '#fff', 0.8); objs = objs.filter(o => !(isHazard(o) && o.d < effectiveSpeed() * 1.2)); nextSpawn = Math.max(nextSpawn, effectiveSpeed() * 1.2); } }
-  if (!dead) { rocketIn -= dt; itemIn -= dt; }
+  if (!dead) rocketIn -= dt;
   if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
   // move world toward the player
   for (const o of objs) {
@@ -389,11 +393,9 @@ function update(dt) {
     if (o.kind === 'ramp') { if (airT <= 0) { airT = AIR; Sound.jump(); float('점프!', W / 2, playerY - 150, '#fff', 0.7, 30); buzz(12); } continue; }
     if (o.kind === 'yuzu') { if (o.air && airT <= 0) continue; o.gone = true; collectYuzu(o); continue; }
     if (o.kind === 'rocket') { o.gone = true; boostT = 5.5; Sound.boost(); flash = 0.6; shake = 10; float('로켓 질주!', W / 2, H * 0.36, '#fff', 1.2, 40); buzz(40); continue; }
-    if (o.kind === 'bubble') { o.gone = true; shield = true; Sound.item(); float('거품 방패!', W / 2, H * 0.4, '#fff', 1, 30); continue; }
     if (isHazard(o)) {
       if (airT > 0) continue;   // sailing over it
       if (boostT > 0) { smash(o); continue; }
-      if (shield) { shield = false; o.gone = true; burst(o, 14, ['#bfe9ff', '#fff']); Sound.pop(); float('방패가 막았어요', W / 2, H * 0.42, '#fff', 0.9, 26); shake = 6; continue; }
       die(o);
     }
   }
@@ -584,54 +586,81 @@ function drawObj(o) {
 function drawCapy() {
   const lv = laneVisual(), x = W / 2 + (lv * 2 - 1) * roadHalf * 0.5;
   const S = Math.min(W, 520) / 420;
-  const run = t * (13 + speed / 140), bob = dead ? 0 : (1 - Math.cos(run)) / 2 * 6 * S;   // lifts off a little at full stretch
-  const tilt = (lane - laneFrom) * (1 - clamp(laneT, 0, 1)) * 0.35;
-  const squash = laneT < 1 ? 1 + Math.sin(clamp(laneT, 0, 1) * Math.PI) * 0.15 : 1;
+  // a quick, chubby waddle-trot: short legs, a round body that bounces and squashes on each step
+  const run = t * (15 + speed / 120), step = Math.abs(Math.sin(run));
+  const bob = dead ? 0 : step * 7 * S;
+  const land = dead ? 0 : Math.pow(1 - step, 4);              // squash right as a foot lands
+  const tilt = (lane - laneFrom) * (1 - clamp(laneT, 0, 1)) * 0.3;
   const hop = airT > 0 ? Math.sin(Math.PI * (1 - airT / AIR)) * 130 * S : 0;
   let y = playerY - bob - hop;
-  if (dead) { y -= Math.sin(Math.min(1, deadT * 2) * Math.PI) * 60 * S; }
+  if (dead) y -= Math.sin(Math.min(1, deadT * 2) * Math.PI) * 60 * S;
+  const mood = dead ? 'dead' : boostT > 0 ? 'boost' : airT > 0 ? 'jump' : nearT > 0 ? 'wow' : 'calm';
   // boost afterimages and flame
   if (boostT > 0) {
-    for (let i = 3; i >= 1; i--) { g.globalAlpha = 0.12 * (4 - i); g.fillStyle = '#ff7a4a'; g.beginPath(); g.ellipse(x, y + i * 26 * S, 30 * S, 38 * S, 0, 0, TAU); g.fill(); }
+    for (let i = 3; i >= 1; i--) { g.globalAlpha = 0.12 * (4 - i); g.fillStyle = '#ff7a4a'; g.beginPath(); g.ellipse(x, y + i * 24 * S, 32 * S, 30 * S, 0, 0, TAU); g.fill(); }
     g.globalAlpha = 1;
     const fl = 40 + Math.sin(t * 40) * 10;
     const grad = g.createLinearGradient(x, y + 30 * S, x, y + (30 + fl) * S);
     grad.addColorStop(0, '#fff3a8'); grad.addColorStop(0.4, '#ffa236'); grad.addColorStop(1, 'rgba(255,90,60,0)');
-    g.fillStyle = grad; g.beginPath(); g.moveTo(x - 16 * S, y + 26 * S); g.lineTo(x, y + (30 + fl) * S); g.lineTo(x + 16 * S, y + 26 * S); g.closePath(); g.fill();
+    g.fillStyle = grad; g.beginPath(); g.moveTo(x - 16 * S, y + 28 * S); g.lineTo(x, y + (32 + fl) * S); g.lineTo(x + 16 * S, y + 28 * S); g.closePath(); g.fill();
   }
+  // shadow stays on the ground
+  g.fillStyle = `rgba(0,0,0,${0.16 * (1 - hop / (200 * S))})`;
+  g.beginPath(); g.ellipse(x, playerY + 30 * S, 30 * S * (1 - hop / (300 * S)), 8 * S, 0, 0, TAU); g.fill();
   g.save();
   g.translate(x, y);
   g.rotate(dead ? deadT * 10 : tilt);
-  g.scale(1 / squash, squash);
-  // shadow
-  g.fillStyle = `rgba(0,0,0,${0.18 * (1 - hop / (200 * S))})`; g.beginPath(); g.ellipse(0, 30 * S + bob + hop, 30 * S * (1 - hop / (300 * S)), 9 * S, 0, 0, TAU); g.fill();
-  // seen from behind and above: a long body with four paws at its corners, galloping.
-  // e = 0 gathered (paws tucked under, body short), e = 1 extended (front paws reach, hind paws kick, body long and off the ground)
-  const e = dead ? 0.3 : (1 - Math.cos(run)) / 2;
-  const L = (60 + e * 16) * S, rx = (25 - e * 2) * S, cy = (8 - e * 6) * S;
-  const shoulder = cy - L / 2 + 14 * S, hip = cy + L / 2 - 14 * S, headY = cy - L / 2 - 6 * S;
-  const leg = (sx, sy, px, py, w) => {
-    g.strokeStyle = '#6e4a2f'; g.lineWidth = w; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(sx, sy); g.lineTo(px, py); g.stroke();
-    g.fillStyle = '#4e3220'; g.beginPath(); g.ellipse(px, py, w * 0.62, w * 0.42, 0, 0, TAU); g.fill();
-  };
+  const sq = airT > 0 ? 0.92 : 1 + land * 0.08;
+  g.scale(1 / sq, sq);
+  const f = face, af = Math.abs(f);
+  // stubby feet: hind pair under the bottom, front pair peeking at the chest, alternating like a trot
+  const foot = (fx, fy, lift) => { g.fillStyle = '#5e3e27'; g.beginPath(); g.ellipse(fx * S, (fy - lift) * S, 7 * S, 5 * S, 0, 0, TAU); g.fill(); };
+  const tuck = airT > 0 ? 6 : 0;
   for (const s of [-1, 1]) {
-    // a slight lead: one side lands a moment before the other
-    const ef = dead ? 0.3 : (1 - Math.cos(run + s * 0.45)) / 2, eh = dead ? 0.3 : (1 - Math.cos(run + s * 0.3)) / 2;
-    // front legs stay under the chest; only the paws peek out beside the head when they reach
-    leg(s * 10 * S, shoulder + 4 * S, s * (14 + ef * 3) * S, shoulder + (10 - ef * 24) * S, 7.5 * S);
-    leg(s * 15 * S, hip, s * (20 + eh * 3) * S, hip + (eh * 22 - (1 - eh) * 12) * S, 11 * S);
+    const k = dead ? 0 : Math.max(0, Math.sin(run + (s > 0 ? 0 : Math.PI)));
+    foot(s * 17, 28 - tuck, k * 7);
+    foot(s * 14, 4 - tuck, Math.max(0, Math.sin(run + (s > 0 ? Math.PI : 0))) * 6);
   }
-  // body, a lighter stripe down the spine, then the head reaching forward
-  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, cy, rx, L / 2, 0, 0, TAU); g.fill();
-  g.fillStyle = '#c48b5c'; g.beginPath(); g.ellipse(0, cy - 2 * S, rx * 0.38, L * 0.38, 0, 0, TAU); g.fill();
-  g.fillStyle = '#a06c44'; g.beginPath(); g.ellipse(0, hip + 2 * S, rx * 0.8, 10 * S, 0, 0, TAU); g.fill();
-  g.fillStyle = '#b07a4f'; g.beginPath(); g.ellipse(0, headY, 17 * S, 15 * S, 0, 0, TAU); g.fill();
-  g.fillStyle = '#7a5233'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * 12 * S, headY - 8 * S, 5.5 * S, 4.5 * S, 0, 0, TAU); g.fill(); }
-  // yuzu on the head
-  drawYuzu(0, headY - 15 * S, 8.5 * S, boostT > 0);
+  // round body with a fluffy edge and a lighter back
+  g.fillStyle = '#b07a4f';
+  g.beginPath(); g.ellipse(0, 8 * S, 31 * S, 27 * S, 0, 0, TAU); g.fill();
+  for (const [fx, fy, r] of [[-27, 18, 7], [27, 18, 7], [-24, 30, 6], [24, 30, 6], [0, 34, 8]]) { g.beginPath(); g.arc(fx * S, fy * S, r * S, 0, TAU); g.fill(); }
+  g.fillStyle = '#c99566'; g.beginPath(); g.ellipse(0, 6 * S, 17 * S, 19 * S, 0, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.12)'; g.beginPath(); g.ellipse(-8 * S, -2 * S, 6 * S, 10 * S, -0.4, 0, TAU); g.fill();
+  // head, turned toward `face`: boxy, with the snout and a sleepy eye showing on that side
+  const hx = f * 5 * S, hy = -22 * S;
+  g.fillStyle = '#7a5233';
+  g.beginPath(); g.ellipse(hx - f * 11 * S, hy - 14 * S, 6 * S, 5 * S, -f * 0.3, 0, TAU); g.fill();      // near ear
+  g.beginPath(); g.ellipse(hx + f * 7 * S, hy - 16 * S, 5 * S, 4.5 * S, f * 0.3, 0, TAU); g.fill();       // far ear
+  g.fillStyle = '#b8835a';
+  g.beginPath(); g.roundRect ? g.roundRect(hx - 21 * S, hy - 17 * S, 42 * S, 33 * S, 15 * S) : g.rect(hx - 21 * S, hy - 17 * S, 42 * S, 33 * S); g.fill();
+  // snout reaching out to the side the head faces
+  g.fillStyle = '#9a6a44';
+  g.beginPath(); g.roundRect ? g.roundRect(hx + f * (6 + 8 * af) * S - 11 * S, hy - 2 * S, 22 * S, 16 * S, 7 * S) : g.rect(hx + f * 12 * S - 11 * S, hy - 2 * S, 22 * S, 16 * S); g.fill();
+  g.fillStyle = 'rgba(70,45,28,0.55)'; g.beginPath(); g.ellipse(hx + f * (13 + 8 * af) * S, hy + 7 * S, 1.3 * S, 2 * S, f * 0.3, 0, TAU); g.fill();   // a soft nostril, not a second eye
+  // blush
+  g.fillStyle = 'rgba(255,130,140,0.5)'; g.beginPath(); g.ellipse(hx + f * 2 * S, hy + 6 * S, 6 * S, 3.5 * S, 0, 0, TAU); g.fill();
+  // eye and expression
+  const ex = hx + f * 4 * S, ey = hy - 4 * S;
+  g.strokeStyle = '#2b2420'; g.fillStyle = '#2b2420'; g.lineWidth = 2.4 * S; g.lineCap = 'round'; g.lineJoin = 'round';
+  if (mood === 'calm') { g.beginPath(); g.moveTo(ex - 4 * S, ey + 1 * S); g.quadraticCurveTo(ex, ey - 3 * S, ex + 4 * S, ey + 1 * S); g.stroke(); }
+  else if (mood === 'jump') { g.beginPath(); g.moveTo(ex - 4 * S, ey - 3 * S); g.lineTo(ex + 2 * S * f, ey); g.lineTo(ex - 4 * S, ey + 3 * S); g.stroke(); }
+  else if (mood === 'wow') {
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, ey, 4.2 * S, 0, TAU); g.fill(); g.stroke();
+    g.fillStyle = '#2b2420'; g.beginPath(); g.arc(ex + f * 1 * S, ey, 2 * S, 0, TAU); g.fill();
+    g.fillStyle = '#8fd0f0'; g.beginPath(); g.moveTo(hx - f * 16 * S, hy - 14 * S); g.quadraticCurveTo(hx - f * 21 * S, hy - 6 * S, hx - f * 16 * S, hy - 4 * S); g.quadraticCurveTo(hx - f * 11 * S, hy - 6 * S, hx - f * 16 * S, hy - 14 * S); g.fill();
+  }
+  else if (mood === 'boost') {
+    g.fillStyle = '#fff6b0'; g.beginPath();
+    for (let i = 0; i < 8; i++) { const r = i % 2 ? 2 * S : 5.5 * S, a = i / 8 * TAU + t * 6; g.lineTo(ex + Math.cos(a) * r, ey + Math.sin(a) * r); }
+    g.closePath(); g.fill(); g.strokeStyle = '#ffa236'; g.lineWidth = 1.2 * S; g.stroke();
+  }
+  else { g.beginPath(); g.moveTo(ex - 3.5 * S, ey - 3.5 * S); g.lineTo(ex + 3.5 * S, ey + 3.5 * S); g.moveTo(ex + 3.5 * S, ey - 3.5 * S); g.lineTo(ex - 3.5 * S, ey + 3.5 * S); g.stroke(); }
+  // the yuzu rides on top, wobbling on its little spring
+  g.save(); g.translate(hx - f * 2 * S, hy - 16 * S); g.rotate(yuzuAng);
+  drawYuzu(0, -8 * S, 9 * S, boostT > 0);
   g.restore();
-  if (shield) { g.strokeStyle = 'rgba(120,200,255,0.9)'; g.lineWidth = 4; g.fillStyle = 'rgba(160,220,255,0.18)'; g.beginPath(); g.arc(x, y - 4 * S, 52 * S + Math.sin(t * 6) * 3, 0, TAU); g.fill(); g.stroke(); }
+  g.restore();
 }
 function render() {
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -697,7 +726,7 @@ function frame(now) {
   if (state === 'paused') { render(); requestAnimationFrame(frame); return; }
   if (hitstop > 0) { hitstop -= dt; dt = 0; }
   if (slowmo > 0) { slowmo -= dt; dt *= 0.35; }
-  if (state === 'title') { t += dt; dist += 300 * dt; for (const s of scenery) s.d -= 300 * dt; scenery = scenery.filter(s => s.d > -K * 0.55); while (scenery.length < 46) addScenery(Math.max(0, ...scenery.map(s => s.d)) + rand(50, 110)); laneT += dt / LANE_TIME; if (Math.random() < dt * 0.6) { laneFrom = laneNow(); lane = 1 - laneFrom; laneT = 0; } }
+  if (state === 'title') { animateCapy(dt); t += dt; dist += 300 * dt; for (const s of scenery) s.d -= 300 * dt; scenery = scenery.filter(s => s.d > -K * 0.55); while (scenery.length < 46) addScenery(Math.max(0, ...scenery.map(s => s.d)) + rand(50, 110)); laneT += dt / LANE_TIME; if (Math.random() < dt * 0.6) { laneFrom = laneNow(); lane = 1 - laneFrom; laneT = 0; } }
   else update(dt);
   if (state === 'run' && !dead) Sound.tickMusic(clamp((speed - BASE_SPEED) / (MAX_SPEED - BASE_SPEED), 0, 1), boostT > 0);
   render();
