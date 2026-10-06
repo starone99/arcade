@@ -609,18 +609,18 @@ function rearSVG(liftL, liftR, squash) {
 </svg>`;
 }
 // front view; eyes: 'dot' | 'happy' | 'squint' | 'star' | 'dizzy'
-function frontSVG(eyes, liftL = 0, liftR = 0, withYuzu = true) {
+function frontSVG(eyes, liftL = 0, liftR = 0, withYuzu = true, sw = 3) {
   const eye = x0 => {
     const x = x0 < 60 ? 46 : 74;
-    if (eyes === 'happy') return `<path d="M${x - 5} 43 q5 -5 10 0" stroke="${OUT}" stroke-width="3" fill="none" stroke-linecap="round"/>`;
-    if (eyes === 'squint') return `<path d="M${x - 4} 38 l${x < 60 ? 7 : -7} 4 l${x < 60 ? -7 : 7} 4" stroke="${OUT}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    if (eyes === 'happy') return `<path d="M${x - 5} 43 q5 -5 10 0" stroke="${OUT}" stroke-width="${sw}" fill="none" stroke-linecap="round"/>`;
+    if (eyes === 'squint') return `<path d="M${x - 4} 38 l${x < 60 ? 7 : -7} 4 l${x < 60 ? -7 : 7} 4" stroke="${OUT}" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
     if (eyes === 'star') return `<path d="M${x} 35 l2 4.5 l5 .5 l-4 3 l1.5 5 l-4.5 -2.8 l-4.5 2.8 l1.5 -5 l-4 -3 l5 -.5z" fill="#fff6b0" stroke="#e08a00" stroke-width="1.5" stroke-linejoin="round"/>`;
     if (eyes === 'wow') return `<circle cx="${x}" cy="41" r="5" fill="#fff" stroke="${OUT}" stroke-width="2.2"/><circle cx="${x + (x < 60 ? 1 : -1)}" cy="41.5" r="2.4" fill="${OUT}"/>`;
-    if (eyes === 'dizzy') return `<path d="M${x - 4} 38 l8 8 M${x + 4} 38 l-8 8" stroke="${OUT}" stroke-width="3" stroke-linecap="round"/>`;
-    return `<path d="M${x - 4.2} 42 h8.4 a4.2 4.2 0 0 1 -8.4 0 z" fill="${OUT}"/><path d="M${x - 5.5} 41.6 h11" stroke="${OUT}" stroke-width="2.4" stroke-linecap="round"/>`;
+    if (eyes === 'dizzy') return `<path d="M${x - 4} 38 l8 8 M${x + 4} 38 l-8 8" stroke="${OUT}" stroke-width="${sw}" stroke-linecap="round"/>`;
+    return `<ellipse cx="${x}" cy="44" rx="3" ry="3.4" fill="${OUT}"/><circle cx="${x + 0.9}" cy="42.8" r="1" fill="#fff" opacity="0.9"/>`;
   };
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-  <g stroke="${OUT}" stroke-width="3" stroke-linejoin="round">
+  <g stroke="${OUT}" stroke-width="${sw}" stroke-linejoin="round">
     <ellipse cx="45" cy="${108 - liftL}" rx="9" ry="6" fill="${PAW}"/>
     <ellipse cx="75" cy="${108 - liftR}" rx="9" ry="6" fill="${PAW}"/>
     <ellipse cx="60" cy="82" rx="33" ry="26" fill="${FUR}"/>
@@ -630,9 +630,8 @@ function frontSVG(eyes, liftL = 0, liftR = 0, withYuzu = true) {
   <rect x="38" y="55" width="44" height="20" rx="10" fill="${MUZZLE}" opacity="0.55"/>
   <ellipse cx="60" cy="90" rx="18" ry="13" fill="${FUR_LIGHT}"/>
   ${eye(45)}${eye(75)}
-  <rect x="49" y="59" width="22" height="7" rx="3.5" fill="#4a3020"/><path d="M53 61 h3 M64 61 h3" stroke="#8a6040" stroke-width="1.6" stroke-linecap="round"/>
-  <path d="M56 70.5 q4 2.5 8 0" stroke="${OUT}" stroke-width="2" fill="none" stroke-linecap="round"/>
-  <ellipse cx="40" cy="56" rx="5" ry="3" fill="#ff9aa8" opacity="0.4"/><ellipse cx="80" cy="56" rx="5" ry="3" fill="#ff9aa8" opacity="0.4"/>
+  <ellipse cx="60" cy="61" rx="7" ry="4.2" fill="#4a3020"/><ellipse cx="58" cy="59.8" rx="2" ry="1" fill="#fff" opacity="0.35"/>
+  <ellipse cx="38" cy="58" rx="4.5" ry="2.6" fill="#ff9aa8" opacity="0.3"/><ellipse cx="82" cy="58" rx="4.5" ry="2.6" fill="#ff9aa8" opacity="0.3"/>
   ${withYuzu ? yuzuSVG(60, 12) : ''}
 </svg>`;
 }
