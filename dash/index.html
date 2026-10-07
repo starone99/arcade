@@ -214,14 +214,16 @@ const laneX = (lane, d) => W / 2 + (lane === 0 ? -1 : 1) * roadHalf * 0.5 * scal
 const LANE_TIME = 0.12;
 let state = 'title', t = 0, dist = 0, speed = 0, score = 0, yuzu = 0, combo = 0, comboT = 0, smashCombo = 0, nearCount = 0, smashed = 0;
 let lane = 1, laneFrom = 1, laneT = 1, boostT = 0, hitstop = 0, slowmo = 0, shake = 0, flash = 0, dead = false, deadT = 0;
-let rings = [], zoomKick = 0, airT = 0, objs = [], parts = [], texts = [], streaks = [], scenery = [], nextSpawn = 0, lastPatternLane = 0, speedLevel = 0, rocketIn = 0, face = 1, nearT = 0, yuzuAng = 0, yuzuVel = 0;
+let rings = [], zoomKick = 0, airT = 0, graceT = 0, objs = [], parts = [], texts = [], streaks = [], scenery = [], nextSpawn = 0, lastPatternLane = 0, speedLevel = 0, rocketIn = 0, face = 1, nearT = 0, yuzuAng = 0, yuzuVel = 0;
 const BASE_SPEED = 600, MAX_SPEED = 1500, BOOST_MUL = 2.2, RAMP_SECS = 120;   // linear climb to 2.5x, then hold (like the Chrome dino)
 const AIR = 0.85;   // seconds airborne after a jump ramp
+const previewSecs = () => clamp(1.8 - (speed / BASE_SPEED - 1) * 0.47, 1.1, 1.8);
+const previewDist = () => effectiveSpeed() * previewSecs();
 
 function reset() {
   t = 0; dist = 0; speed = BASE_SPEED; score = 0; yuzu = 0; combo = 0; comboT = 0; nearCount = 0; smashed = 0; smashCombo = 0;
   lane = 1; laneFrom = 1; laneT = 1; boostT = 0; hitstop = 0; slowmo = 0; shake = 0; flash = 0; dead = false; deadT = 0;
-  objs = []; parts = []; texts = []; rings = []; zoomKick = 0; airT = 0; nextSpawn = 900; speedLevel = 0; rocketIn = rand(9, 13); face = 1; nearT = 0; yuzuAng = 0; yuzuVel = 0;
+  objs = []; parts = []; texts = []; rings = []; zoomKick = 0; airT = 0; graceT = 0; nextSpawn = 900; speedLevel = 0; rocketIn = rand(9, 13); face = 1; nearT = 0; yuzuAng = 0; yuzuVel = 0;
   scenery = [];
   for (let d = -200; d < 2400; d += rand(60, 120)) addScenery(d);
 }
@@ -233,8 +235,8 @@ function addScenery(d) {
 // obstacle patterns, always leaving a way through at the current speed
 function spawnPattern() {
   const sp = effectiveSpeed();
-  const tight = Math.max(0.42, 0.62 - speedLevel * 0.03);
-  const gap = sp * rand(tight, tight + 0.28);       // room to react between rows
+  const tight = Math.max(0.4, 0.56 - speedLevel * 0.03);
+  const gap = sp * rand(tight, tight + 0.22);        // time between rows, in seconds of running
   const base = nextSpawn;
   let used = 0;
   const pick = () => (Math.random() < 0.55 ? 1 - lastPatternLane : lastPatternLane);
@@ -280,7 +282,7 @@ function spawnPattern() {
     }
     lastPatternLane = 1 - l;
     used = n * gap;
-  } else if (r < 0.6 && dist > 2500) {
+  } else if (r < 0.62 && dist > 800) {
     // a crab scuttling across: dodge to the lane it is leaving
     const l = pick();
     objs.push({ kind: 'crab', lane: l, d: base, dir: l === 0 ? 1 : -1, x: l, wait: rand(0.2, 0.5) });
@@ -301,7 +303,7 @@ function spawnPattern() {
     lastPatternLane = 1 - l;
     used = 90 + gap;
   }
-  nextSpawn = base + used + gap * rand(0.8, 1.3);
+  nextSpawn = base + used + gap * rand(0.7, 1.1);
 }
 const effectiveSpeed = () => speed * (boostT > 0 ? BOOST_MUL : 1);
 const laneNow = () => (laneT > 0.5 ? lane : laneFrom);
@@ -373,7 +375,8 @@ function update(dt) {
   laneT += dt / LANE_TIME;
   animateCapy(dt);
   if (airT > 0) { airT -= dt; if (airT <= 0) { Sound.land(); shake = Math.max(shake, 5); for (let i = 0; i < 10; i++) parts.push({ x: laneX(laneNow(), 0) + rand(-20, 20), y: playerY + 24, vx: rand(-160, 160), vy: rand(-120, -20), g: 400, life: 0.45, age: 0, r: rand(3, 6), c: 'rgba(255,255,255,0.85)' }); } }
-  if (boostT > 0) { boostT -= dt; if (boostT <= 0) { smashCombo = 0; float('부스트 끝', W / 2, H * 0.4, '#fff', 0.8); objs = objs.filter(o => !(isHazard(o) && o.d < effectiveSpeed() * 1.2)); nextSpawn = Math.max(nextSpawn, effectiveSpeed() * 1.2); } }
+  if (graceT > 0) graceT -= dt;
+  if (boostT > 0) { boostT -= dt; if (boostT <= 0) { smashCombo = 0; graceT = 0.8; float('부스트 끝', W / 2, H * 0.4, '#fff', 0.8); objs = objs.filter(o => !(isHazard(o) && o.d < effectiveSpeed() * 1.2)); nextSpawn = Math.max(nextSpawn, effectiveSpeed() * 1.2); } }
   if (!dead) rocketIn -= dt;
   if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
   // move world toward the player
@@ -398,7 +401,7 @@ function update(dt) {
     if (o.kind === 'yuzu') { if (o.air && airT <= 0) continue; o.gone = true; collectYuzu(o); continue; }
     if (o.kind === 'rocket') { o.gone = true; boostT = 5.5; Sound.boost(); flash = 0.6; shake = 10; float('로켓 질주!', W / 2, H * 0.36, '#fff', 1.2, 40); buzz(40); continue; }
     if (isHazard(o)) {
-      if (airT > 0) continue;   // sailing over it
+      if (airT > 0 || graceT > 0) continue;   // sailing over it, or still shaking off the rocket
       if (boostT > 0) { smash(o); continue; }
       die(o);
     }
@@ -687,7 +690,9 @@ function drawCapy() {
   g.rotate(dead ? deadT * 10 : tilt);
   const land = dead || airT > 0 ? 0 : Math.pow(1 - step, 4) * 0.07;
   g.scale((1 + land) * Math.max(0.08, Math.abs(flip)), 1 - land);
+  if (graceT > 0 && Math.floor(graceT * 14) % 2) g.globalAlpha = 0.35;
   if (img.complete && img.naturalWidth) g.drawImage(img, -size / 2, -size * 0.92, size, size);
+  g.globalAlpha = 1;
   g.restore();
   if (boostT > 0 && airT <= 0 && !dead) {
     // scarf tails fluttering out behind the neck
@@ -721,7 +726,14 @@ function render() {
   // objects far to near, the capybara drawn in its depth slot
   const list = objs.slice().sort((a, b) => b.d - a.d);
   let drawn = false;
-  for (const o of list) { if (!drawn && o.d < 0) { drawCapy(); drawn = true; } if (o.d < 2800) drawObj(o); }
+  const pv = previewDist();
+  for (const o of list) {
+    if (!drawn && o.d < 0) { drawCapy(); drawn = true; }
+    if (o.d > pv) continue;
+    g.globalAlpha = clamp((pv - o.d) / (pv * 0.18), 0, 1);
+    drawObj(o);
+    g.globalAlpha = 1;
+  }
   if (!drawn) drawCapy();
   // particles
   for (const p of parts) {
