@@ -215,9 +215,9 @@ const LANE_TIME = 0.12;
 let state = 'title', t = 0, dist = 0, speed = 0, score = 0, yuzu = 0, combo = 0, comboT = 0, smashCombo = 0, nearCount = 0, smashed = 0;
 let lane = 1, laneFrom = 1, laneT = 1, boostT = 0, hitstop = 0, slowmo = 0, shake = 0, flash = 0, dead = false, deadT = 0;
 let rings = [], zoomKick = 0, airT = 0, graceT = 0, objs = [], parts = [], texts = [], streaks = [], scenery = [], nextSpawn = 0, lastPatternLane = 0, speedLevel = 0, rocketIn = 0, face = 1, nearT = 0, yuzuAng = 0, yuzuVel = 0;
-const BASE_SPEED = 600, MAX_SPEED = 1500, BOOST_MUL = 2.2, RAMP_SECS = 120;   // linear climb to 2.5x, then hold (like the Chrome dino)
+const BASE_SPEED = 660, MAX_SPEED = 1650, BOOST_MUL = 2.2, RAMP_SECS = 120;   // linear climb to 2.5x, then hold (like the Chrome dino)
 const AIR = 0.85;   // seconds airborne after a jump ramp
-const previewSecs = () => clamp(1.8 - (speed / BASE_SPEED - 1) * 0.47, 1.1, 1.8);
+const previewSecs = () => clamp(1.5 - (speed / BASE_SPEED - 1) * 0.4, 0.9, 1.5);
 const previewDist = () => effectiveSpeed() * previewSecs();
 
 function reset() {
@@ -235,7 +235,7 @@ function addScenery(d) {
 // obstacle patterns, always leaving a way through at the current speed
 function spawnPattern() {
   const sp = effectiveSpeed();
-  const tight = Math.max(0.4, 0.56 - speedLevel * 0.03);
+  const tight = Math.max(0.32, 0.48 - speedLevel * 0.03);
   const gap = sp * rand(tight, tight + 0.22);        // time between rows, in seconds of running
   const base = nextSpawn;
   let used = 0;
@@ -273,7 +273,7 @@ function spawnPattern() {
   const r = Math.random();
   if (r < 0.45) {
     // zigzag: alternate lanes with yuzu along the safe side
-    const n = 2 + Math.floor(Math.random() * (2 + Math.min(4, speedLevel)));
+    const n = 3 + Math.floor(Math.random() * (2 + Math.min(5, speedLevel)));
     let l = pick();
     for (let i = 0; i < n; i++) {
       objs.push({ kind: Math.random() < 0.6 ? 'rock' : 'log', lane: l, d: base + i * gap });
@@ -282,7 +282,7 @@ function spawnPattern() {
     }
     lastPatternLane = 1 - l;
     used = n * gap;
-  } else if (r < 0.62 && dist > 800) {
+  } else if (r < 0.7 && dist > 800) {
     // a crab scuttling across: dodge to the lane it is leaving
     const l = pick();
     objs.push({ kind: 'crab', lane: l, d: base, dir: l === 0 ? 1 : -1, x: l, wait: rand(0.2, 0.5) });
@@ -383,7 +383,7 @@ function update(dt) {
   for (const o of objs) {
     o.pd = o.d;
     o.d -= sp * dt;
-    if (o.kind === 'crab' && o.dir && o.d < sp * 0.9) { o.wait -= dt; if (o.wait <= 0) { o.x = clamp(o.x + o.dir * dt * 2.4, 0, 1); o.lane = o.x > 0.5 ? 1 : 0; } }
+    if (o.kind === 'crab' && o.dir && o.d < sp * 0.9) { o.wait -= dt; if (o.wait <= 0) { o.x = clamp(o.x + o.dir * dt * 3, 0, 1); o.lane = o.x > 0.5 ? 1 : 0; } }
   }
   for (const s of scenery) s.d -= sp * dt;
   scenery = scenery.filter(s => s.d > -K * 0.55);
